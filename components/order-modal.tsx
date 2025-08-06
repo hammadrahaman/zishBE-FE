@@ -178,25 +178,29 @@ export function OrderModal({ isOpen, onClose, cart, clearCart }: OrderModalProps
         duration: 5000,
       })
 
-      // Reset form
-      setCustomerName("")
-      setPhoneNumber("")
-      setCustomerEmail("")
-      setGeneralInstructions("")
-      setEmailError(null)
-      setPhoneError(null)
-      setNameError(null)
-      
+      // Reset form and close modal
+      resetForm()
       clearCart()
       onClose()
       
     } catch (error) {
-      console.error('Order submission error:', error)
+      console.error('Order submission error:', error);
+      
+      // More specific error handling
+      let errorMessage = 'Failed to place order. Please try again.';
+      if (error instanceof Error) {
+        if (error.message.includes('not available')) {
+          errorMessage = 'Some items in your cart are no longer available. Please refresh your cart and try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
         title: "Order Failed",
-        description: error instanceof Error ? error.message : "Failed to place order. Please try again.",
+        description: errorMessage,
         variant: "destructive",
-      })
+      });
     } finally {
       setIsSubmitting(false)
     }

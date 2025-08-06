@@ -53,29 +53,32 @@ export async function fetchMenuItems(): Promise<MenuItem[]> {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
-      credentials: 'include', // Add this line
-    })
+      credentials: 'include',
+    });
 
     if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
       console.error('Menu API response not ok:', {
         status: response.status,
-        statusText: response.statusText
+        statusText: response.statusText,
+        errorData
       });
-      throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`)
+      throw new Error(errorData.message || `HTTP error! status: ${response.status} - ${response.statusText}`);
     }
 
-    const apiResponse: ApiResponse<BackendMenuItem[]> = await response.json()
+    const apiResponse: ApiResponse<BackendMenuItem[]> = await response.json();
     console.log('Menu API response:', apiResponse);
     
     if (!apiResponse.success) {
-      throw new Error(apiResponse.message || 'Failed to fetch menu items')
+      throw new Error(apiResponse.message || 'Failed to fetch menu items');
     }
 
-    return apiResponse.data.map(transformMenuItem)
+    return apiResponse.data.map(transformMenuItem);
   } catch (error) {
-    console.error('Error fetching menu items:', error)
-    throw error
+    console.error('Error fetching menu items:', error);
+    throw error;
   }
 }
 

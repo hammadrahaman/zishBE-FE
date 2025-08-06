@@ -1,8 +1,8 @@
-import type { 
-  ApiResponse, 
-  BackendOrder, 
-  Order, 
-  OrderSubmission, 
+import type {
+  ApiResponse,
+  BackendOrder,
+  Order,
+  OrderSubmission,
   OrderStatusUpdate,
   PaymentStatusUpdate,
   OrderCancellation,
@@ -44,9 +44,53 @@ function transformOrder(backendOrder: BackendOrder): Order {
   }
 }
 
-// Place new order
+export async function checkItemsAvailability(itemIds: number[]): Promise<boolean> {
+  try {
+    // Try GET first
+    console.log('Trying GET test...');
+    const getResponse = await fetch(`${API_BASE_URL}/menu/test`, {
+      method: 'GET',
+    });
+    console.log('GET response:', getResponse.status);
+    
+    // Then try POST
+    console.log('Trying POST test...');
+    const postResponse = await fetch(`${API_BASE_URL}/menu/test`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ itemIds }),
+    });
+    console.log('POST response:', postResponse.status);
+
+    if (!postResponse.ok) {
+      const errorData = await postResponse.json();
+      console.error('Error response:', errorData);
+      throw new Error(errorData.message || 'Failed to check item availability');
+    }
+
+    const availabilityResponse = await postResponse.json();
+    console.log('Success response:', availabilityResponse);
+    return true; // For testing
+  } catch (error) {
+    console.error('Error checking item availability:', error);
+    throw error;
+  }
+}
+
 export async function placeOrder(orderData: OrderSubmission): Promise<Order> {
   try {
+    // First, verify item availability
+    const itemIds = orderData.items.map(item => item.menuItemId);
+
+    try {
+      await checkItemsAvailability(itemIds);
+    } catch (error) {
+      throw new Error('Some menu items are not available. Please refresh your cart and try again.');
+    }
+
+    // Proceed with order placement
     const response = await fetch(`${API_BASE_URL}/orders`, {
       method: 'POST',
       headers: {
@@ -61,7 +105,7 @@ export async function placeOrder(orderData: OrderSubmission): Promise<Order> {
     }
 
     const apiResponse: ApiResponse<BackendOrder> = await response.json()
-    
+
     if (!apiResponse.success) {
       throw new Error(apiResponse.message || 'Failed to place order')
     }
@@ -101,7 +145,7 @@ export async function fetchAllOrders(params?: {
     if (params?.includeCancelled !== undefined) queryParams.append('includeCancelled', params.includeCancelled.toString())
 
     const url = `${API_BASE_URL}/orders${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -114,7 +158,7 @@ export async function fetchAllOrders(params?: {
     }
 
     const apiResponse: OrdersListResponse = await response.json()
-    
+
     if (!apiResponse.success) {
       throw new Error(apiResponse.message || 'Failed to fetch orders')
     }
@@ -138,7 +182,7 @@ export async function fetchOrdersByPhone(phone: string, includeCancelled: boolea
     if (includeCancelled) queryParams.append('includeCancelled', 'true')
 
     const url = `${API_BASE_URL}/orders/customer/${phone}${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -151,7 +195,7 @@ export async function fetchOrdersByPhone(phone: string, includeCancelled: boolea
     }
 
     const apiResponse: ApiResponse<BackendOrder[]> = await response.json()
-    
+
     if (!apiResponse.success) {
       throw new Error(apiResponse.message || 'Failed to fetch orders')
     }
@@ -184,7 +228,7 @@ export async function updateOrderStatus(orderId: string, statusUpdate: OrderStat
     }
 
     const apiResponse: ApiResponse<any> = await response.json()
-    
+
     if (!apiResponse.success) {
       throw new Error(apiResponse.message || 'Failed to update order status')
     }
@@ -215,7 +259,7 @@ export async function updatePaymentStatus(orderId: string, paymentUpdate: Paymen
     }
 
     const apiResponse: ApiResponse<any> = await response.json()
-    
+
     if (!apiResponse.success) {
       throw new Error(apiResponse.message || 'Failed to update payment status')
     }
@@ -225,32 +269,28 @@ export async function updatePaymentStatus(orderId: string, paymentUpdate: Paymen
   }
 }
 
-// Cancel order
 export async function cancelOrder(orderId: string, cancellation: OrderCancellation): Promise<void> {
   try {
-    const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
-      method: 'DELETE',
+    const response = await fetch(`${API_BASE_URL}/orders/${orderId}/cancel`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        cancellationReason: cancellation.reason,
-        cancelledBy: cancellation.cancelledBy || 'admin'
-      }),
-    })
+      body: JSON.stringify(cancellation),
+    });
 
     if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to cancel order');
     }
 
-    const apiResponse: ApiResponse<any> = await response.json()
-    
+    const apiResponse = await response.json();
+
     if (!apiResponse.success) {
-      throw new Error(apiResponse.message || 'Failed to cancel order')
+      throw new Error(apiResponse.message || 'Failed to cancel order');
     }
   } catch (error) {
-    console.error('Error cancelling order:', error)
-    throw error
+    console.error('Error cancelling order:', error);
+    throw error;
   }
 } 
