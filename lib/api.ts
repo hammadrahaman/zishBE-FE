@@ -4,7 +4,7 @@ import { CATEGORY_MAP } from './types.ts'
 // API Configuration - Updated to use port 8000
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1'
 
-// Test API connection
+// Test API connection great
 export async function testApiConnection(): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE_URL}/menu/test`, {
