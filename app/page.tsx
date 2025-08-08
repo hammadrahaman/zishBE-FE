@@ -695,6 +695,28 @@ export default function HomePage() {
     }
   }
 
+  // Update the updateMenuItemQuantity function
+  const updateMenuItemQuantity = (item: MenuItem, newQuantity: number) => {
+    if (newQuantity === 0) {
+      // Remove item from cart
+      setCart(cart.filter(cartItem => cartItem.id !== item.id));
+      return;
+    }
+
+    const existingItem = cart.find(cartItem => cartItem.id === item.id);
+    if (existingItem) {
+      // Update existing item quantity
+      setCart(cart.map(cartItem =>
+        cartItem.id === item.id
+          ? { ...cartItem, quantity: newQuantity }
+          : cartItem
+      ));
+    } else {
+      // Add new item to cart
+      setCart([...cart, { ...item, quantity: newQuantity, cartId: Date.now() }]);
+    }
+  }
+
   // Loading state
   if (loading) {
     return (
@@ -1088,9 +1110,9 @@ export default function HomePage() {
             <MobileMenuSearch
               menuItems={menuItems}
               categories={categories}
-              cart={cart} // Pass main cart state
-              onAddToCart={addToCart}
-              onUpdateQuantity={updateCartItemQuantity} // Pass quantity update function
+              cart={cart}
+              onAddToCart={(item) => addToCart(item, 1)}
+              onUpdateQuantity={updateMenuItemQuantity}  // Use the new function
               selectedCategory={selectedCategory}
               onCategoryChange={setSelectedCategory}
             />

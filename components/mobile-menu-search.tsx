@@ -60,7 +60,9 @@ export function MobileMenuSearch({
   }
 
   const updateQuantity = (item: MenuItem, newQuantity: number) => {
-    onUpdateQuantity(item, newQuantity)
+    if (newQuantity >= 0) {  // Prevent negative quantities
+      onUpdateQuantity(item, newQuantity);
+    }
   }
 
   return (
@@ -138,7 +140,10 @@ export function MobileMenuSearch({
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-white hover:bg-gray-700 rounded-md"
-                          onClick={() => updateQuantity(item, quantity - 1)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateQuantity(item, quantity - 1);
+                          }}
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
@@ -149,7 +154,10 @@ export function MobileMenuSearch({
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-white hover:bg-gray-700 rounded-md"
-                          onClick={() => updateQuantity(item, quantity + 1)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateQuantity(item, quantity + 1);
+                          }}
                         >
                           <Plus className="h-3 w-3" />
                         </Button>
@@ -159,7 +167,10 @@ export function MobileMenuSearch({
                     <Button
                       size="sm"
                       className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-semibold py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border-0"
-                      onClick={() => handleAddToCart(item)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddToCart(item);
+                      }}
                     >
                       <ShoppingCart className="mr-1 h-3 w-3" />
                       Add
