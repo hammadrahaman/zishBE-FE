@@ -1161,7 +1161,10 @@ export default function HomePage() {
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0 text-white hover:bg-gray-700 rounded-md"
-                              onClick={() => updateCartItemQuantity(item.id, cartQuantity - 1)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateMenuItemQuantity(item, cartQuantity - 1);
+                              }}
                             >
                               <Minus className="h-4 w-4" />
                             </Button>
@@ -1172,7 +1175,10 @@ export default function HomePage() {
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0 text-white hover:bg-gray-700 rounded-md"
-                              onClick={() => updateCartItemQuantity(item.id, cartQuantity + 1)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateMenuItemQuantity(item, cartQuantity + 1);
+                              }}
                             >
                               <Plus className="h-4 w-4" />
                             </Button>
