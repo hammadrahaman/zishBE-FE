@@ -178,45 +178,52 @@ export function OrderManagement({ userType }: OrderManagementProps) {
     }
   }
 
-  const handlePaymentUpdate = async (orderId: string, newStatus: string, paymentMethod?: string) => {
+  const handlePaymentUpdate = async (
+    orderId: string,
+    newStatus: 'pending' | 'paid_cash' | 'paid_upi'
+  ) => {
     try {
       setUpdatingOrders(prev => new Set(prev).add(orderId))
-      
-      // Update local state immediately for better UX
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
-          order.id === orderId 
-            ? { ...order, paymentStatus: newStatus, paymentMethod: paymentMethod || order.paymentMethod }
-            : order
+
+      // Map UI statuses to backend shape
+      const backendStatus: 'pending' | 'paid' = 
+        newStatus === 'paid_cash' || newStatus === 'paid_upi' ? 'paid' : 'pending'
+      const backendMethod: 'cash' | 'upi' | undefined =
+        newStatus === 'paid_cash' ? 'cash' : newStatus === 'paid_upi' ? 'upi' : undefined
+
+      // Optimistic update (use backend shape so selection sticks on reload)
+      setOrders(prev =>
+        prev.map(o =>
+          o.id === orderId ? { ...o, paymentStatus: backendStatus, paymentMethod: backendMethod } : o
         )
       )
 
-      await updatePaymentStatus(orderId, { 
-        paymentStatus: newStatus as 'pending' | 'paid' | 'failed' | 'refunded',
-        paymentMethod: paymentMethod as 'cash' | 'card' | 'upi' | 'online' | undefined
+      await updatePaymentStatus(orderId, {
+        paymentStatus: backendStatus,
+        paymentMethod: backendMethod
       })
-      
-      // Refresh from server to ensure consistency
+
       await loadOrders(currentPage)
-      
-      toast({
-        title: "Payment Updated",
-        description: `Payment status updated to ${PAYMENT_STATUS_LABELS[newStatus]}`,
-      })
+
+      const label =
+        backendStatus === 'paid'
+          ? `Paid ${backendMethod ? `(${backendMethod.toUpperCase()})` : ''}`
+          : 'Payment Pending'
+
+      toast({ title: 'Payment Updated', description: label })
     } catch (err) {
       console.error('Failed to update payment status:', err)
-      // Revert local change on error
       await loadOrders(currentPage)
       toast({
-        title: "Update Failed",
-        description: "Failed to update payment status. Please try again.",
-        variant: "destructive",
+        title: 'Update Failed',
+        description: 'Failed to update payment status. Please try again.',
+        variant: 'destructive',
       })
     } finally {
       setUpdatingOrders(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(orderId)
-        return newSet
+        const s = new Set(prev)
+        s.delete(orderId)
+        return s
       })
     }
   }
@@ -521,45 +528,67 @@ export function OrderManagement({ userType }: OrderManagementProps) {
                           <div>
                             <h4 className="font-medium text-sm text-gray-700 mb-2">Payment Status:</h4>
                             <div className="flex flex-wrap gap-2">
-                              <Button
-                                variant={order.paymentStatus === 'pending' ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => handlePaymentUpdate(order.id, 'pending')}
-                                disabled={isUpdating}
-                                className={order.paymentStatus === 'pending' 
-                                  ? 'bg-orange-500 hover:bg-orange-600 text-white border-orange-500' 
-                                  : 'border-gray-400 text-gray-600 hover:bg-gray-50'
-                                }
-                              >
-                                {isUpdating ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <XCircle className="h-3 w-3 mr-1" />}
-                                Unpaid
-                              </Button>
-                              <Button
-                                variant={order.paymentStatus === 'paid' && order.paymentMethod === 'cash' ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => handlePaymentUpdate(order.id, 'paid', 'cash')}
-                                disabled={isUpdating}
-                                className={order.paymentStatus === 'paid' && order.paymentMethod === 'cash' 
-                                  ? 'bg-orange-500 hover:bg-orange-600 text-white border-orange-500' 
-                                  : 'border-green-400 text-green-600 hover:bg-green-50'
-                                }
-                              >
-                                {isUpdating ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CreditCard className="h-3 w-3 mr-1" />}
-                                Paid Cash
-                              </Button>
-                              <Button
-                                variant={order.paymentStatus === 'paid' && order.paymentMethod === 'upi' ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => handlePaymentUpdate(order.id, 'paid', 'upi')}
-                                disabled={isUpdating}
-                                className={order.paymentStatus === 'paid' && order.paymentMethod === 'upi' 
-                                  ? 'bg-orange-500 hover:bg-orange-600 text-white border-orange-500' 
-                                  : 'border-blue-400 text-blue-600 hover:bg-blue-50'
-                                }
-                              >
-                                {isUpdating ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CreditCard className="h-3 w-3 mr-1" />}
-                                Paid UPI
-                              </Button>
+                              {(() => {
+                                const isPaid = order.paymentStatus === 'paid'
+                                const isCash = order.paymentMethod === 'cash'
+                                const isUpi = order.paymentMethod === 'upi'
+
+                                return (
+                                  <>
+                                    {/* Unpaid */}
+                                    <Button
+                                      variant={order.paymentStatus === 'pending' ? 'default' : 'outline'}
+                                      size="sm"
+                                      onClick={() => handlePaymentUpdate(order.id, 'pending')}
+                                      disabled={isUpdating || isPaid}
+                                      className={`relative ${
+                                        order.paymentStatus === 'pending'
+                                          ? 'bg-orange-500 text-white border-orange-500 disabled:opacity-100'
+                                          : 'border-gray-300 text-gray-400 cursor-not-allowed'
+                                      }`}
+                                    >
+                                      {isUpdating ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <XCircle className="h-3 w-3 mr-1" />}
+                                      Unpaid
+                                    </Button>
+
+                                    {/* Paid Cash */}
+                                    <Button
+                                      variant={isPaid && isCash ? 'default' : 'outline'}
+                                      size="sm"
+                                      onClick={() => handlePaymentUpdate(order.id, 'paid_cash')}
+                                      disabled={isUpdating || isPaid}
+                                      className={`relative ${
+                                        isPaid && isCash
+                                          ? 'bg-green-500 text-white border-green-500 disabled:opacity-100'
+                                          : isPaid
+                                          ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                                          : 'border-green-600 text-green-700 hover:bg-green-50'
+                                      }`}
+                                    >
+                                      {isUpdating ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CheckCircle className="h-3 w-3 mr-1" />}
+                                      Paid Cash
+                                    </Button>
+
+                                    {/* Paid UPI */}
+                                    <Button
+                                      variant={isPaid && isUpi ? 'default' : 'outline'}
+                                      size="sm"
+                                      onClick={() => handlePaymentUpdate(order.id, 'paid_upi')}
+                                      disabled={isUpdating || isPaid}
+                                      className={`relative ${
+                                        isPaid && isUpi
+                                          ? 'bg-green-500 text-white border-green-500 disabled:opacity-100'
+                                          : isPaid
+                                          ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                                          : 'border-green-600 text-green-700 hover:bg-green-50'
+                                      }`}
+                                    >
+                                      {isUpdating ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CreditCard className="h-3 w-3 mr-1" />}
+                                      Paid UPI
+                                    </Button>
+                                  </>
+                                )
+                              })()}
                             </div>
                           </div>
                         </div>
