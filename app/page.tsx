@@ -605,7 +605,7 @@ export default function HomePage() {
   const categories = ["All", ...Array.from(new Set(menuItems.map(item => item.category)))]
 
   const filteredItems = menuItems.filter((item) => {
-    console.log(item)
+    //console.log(item)
     // Category filter
     const categoryMatch = selectedCategory === "All" || item.category === selectedCategory
 

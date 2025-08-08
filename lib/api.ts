@@ -47,7 +47,7 @@ function getImageFileName(itemName: string): string {
 // API Functions
 export async function fetchMenuItems(): Promise<MenuItem[]> {
   try {
-    console.log('Attempting to fetch menu items from:', `${API_BASE_URL}/menu/items`);
+  //  console.log('Attempting to fetch menu items from:', `${API_BASE_URL}/menu/items`);
     
     const response = await fetch(`${API_BASE_URL}/menu/items`, {
       method: 'GET',
@@ -69,7 +69,7 @@ export async function fetchMenuItems(): Promise<MenuItem[]> {
     }
 
     const apiResponse: ApiResponse<BackendMenuItem[]> = await response.json();
-    console.log('Menu API response:', apiResponse);
+  //  console.log('Menu API response:', apiResponse);
     
     if (!apiResponse.success) {
       throw new Error(apiResponse.message || 'Failed to fetch menu items');
