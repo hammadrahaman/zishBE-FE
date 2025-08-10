@@ -22,6 +22,7 @@ import {
   Users,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { fetchOrdersInsights, fetchSalesInsights } from "@/lib/order-api"
 
 interface InventoryOrder {
   id: string
@@ -59,11 +60,63 @@ export function InventoryInsights({ userType }: InventoryInsightsProps) {
   const [customStartDate, setCustomStartDate] = useState("")
   const [customEndDate, setCustomEndDate] = useState("")
   const { toast } = useToast()
+  const [ordersInsights, setOrdersInsights] = useState<{ completed_orders_count: number; completed_orders_amount: number; total_items_sold: number; top_items: { item_name: string; total_quantity: number }[] } | null>(null)
+  const [paidRevenue, setPaidRevenue] = useState<number | null>(null)
+  const [salesTopItems, setSalesTopItems] = useState<{ item_name: string; total_quantity: number }[] | null>(null)
 
   useEffect(() => {
     const savedOrders = JSON.parse(localStorage.getItem("inventoryOrders") || "[]")
     setInventoryOrders(savedOrders)
   }, [])
+
+  // Load order sales (completed orders) and paid revenue for the selected period
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        let start: string | undefined
+        let end: string | undefined
+        const now = new Date()
+        if (dateFilter === "thisMonth") {
+          const s = new Date(now.getFullYear(), now.getMonth(), 1)
+          const e = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+          start = s.toISOString().slice(0, 10)
+          end = e.toISOString().slice(0, 10)
+        } else if (dateFilter === "lastMonth") {
+          const s = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+          const e = new Date(now.getFullYear(), now.getMonth(), 0)
+          start = s.toISOString().slice(0, 10)
+          end = e.toISOString().slice(0, 10)
+        } else if (dateFilter === "custom" && customStartDate && customEndDate) {
+          start = customStartDate
+          end = customEndDate
+        }
+        const [completedRes, salesRes] = await Promise.all([
+          fetchOrdersInsights({ start, end }),
+          fetchSalesInsights({ start, end }),
+        ])
+        if (!cancelled) {
+          setOrdersInsights({
+            completed_orders_count: completedRes.completed_orders_count,
+            completed_orders_amount: completedRes.completed_orders_amount,
+            total_items_sold: completedRes.total_items_sold,
+            top_items: completedRes.top_items,
+          })
+          setPaidRevenue(salesRes.total_sales)
+          setSalesTopItems(salesRes.top_items || null)
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setOrdersInsights(null)
+          setPaidRevenue(null)
+          setSalesTopItems(null)
+        }
+      }
+    }
+    load()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFilter, customStartDate, customEndDate])
 
   // Helper function to get month data
   const getMonthRange = (monthOffset: number = 0) => {
@@ -214,6 +267,18 @@ export function InventoryInsights({ userType }: InventoryInsightsProps) {
     csvData.push(['Most Purchased Item', currentMetrics.mostPurchasedItem ? `${currentMetrics.mostPurchasedItem.name} (₹${currentMetrics.mostPurchasedItem.amount})` : 'N/A', comparisonMetrics?.mostPurchasedItem ? `${comparisonMetrics.mostPurchasedItem.name} (₹${comparisonMetrics.mostPurchasedItem.amount})` : 'N/A', ''])
     csvData.push(['Top Spender', currentMetrics.topSpender?.name || 'N/A', comparisonMetrics?.topSpender?.name || 'N/A', ''])
 
+    // Append order sales (completed orders)
+    if (ordersInsights) {
+      csvData.push([])
+      csvData.push(['Order Sales (Completed Orders)'])
+      csvData.push(['Completed Orders', ordersInsights.completed_orders_count])
+      csvData.push(['Paid Revenue (₹)', paidRevenue ?? 0])
+      csvData.push(['Total Items Sold', ordersInsights.total_items_sold])
+      csvData.push([])
+      csvData.push(['Top Items', 'Quantity']);
+      (salesTopItems ?? ordersInsights.top_items).forEach(it => csvData.push([it.item_name, it.total_quantity]))
+    }
+
     const csvContent = csvData.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -236,7 +301,10 @@ export function InventoryInsights({ userType }: InventoryInsightsProps) {
       comparison: comparisonMetrics,
       period: getPeriodLabel(),
       generatedOn: new Date().toLocaleString(),
-      detailedOrders: getDetailedOrdersForPeriod()
+      detailedOrders: getDetailedOrdersForPeriod(),
+      orderSales: ordersInsights || undefined,
+      paidRevenue: paidRevenue ?? undefined,
+      paidTopItems: salesTopItems ?? undefined
     }
 
     const jsonContent = JSON.stringify(excelData, null, 2)
@@ -529,6 +597,55 @@ export function InventoryInsights({ userType }: InventoryInsightsProps) {
                 </tbody>
               </table>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Order Sales (Completed Orders) Section */}
+      {ordersInsights && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-green-600" />
+              Order Sales (Completed Orders)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="p-4 border rounded-lg bg-white">
+                <p className="text-sm text-gray-600">Completed Orders</p>
+                <p className="text-2xl font-bold text-gray-900">{ordersInsights.completed_orders_count}</p>
+              </div>
+              <div className="p-4 border rounded-lg bg-white">
+                <p className="text-sm text-gray-600">Paid Revenue (₹)</p>
+                <p className="text-2xl font-bold text-green-600">₹{(paidRevenue ?? 0).toFixed(2)}</p>
+              </div>
+              <div className="p-4 border rounded-lg bg-white">
+                <p className="text-sm text-gray-600">Total Items Sold</p>
+                <p className="text-2xl font-bold text-purple-700">{ordersInsights.total_items_sold}</p>
+              </div>
+            </div>
+
+            {(salesTopItems && salesTopItems.length > 0) || ordersInsights.top_items.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Top Items (Top 20)</TableHead>
+                      <TableHead className="text-right">Quantity</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(salesTopItems ?? ordersInsights.top_items).map((it, idx) => (
+                      <TableRow key={`${it.item_name}-${idx}`}>
+                        <TableCell className="font-medium">{it.item_name}</TableCell>
+                        <TableCell className="text-right">{it.total_quantity}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       )}

@@ -10,6 +10,7 @@ import type {
   OrdersListResponse,
   RevenueStats,
   DashboardStats,
+  OrdersInsights,
 } from './types'
 
 // API Configuration
@@ -409,4 +410,28 @@ export async function downloadDashboardExport(): Promise<void> {
   a.download = `cafe-dashboard-export-${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// Fetch completed orders insights for a period (defaults to current month)
+export async function fetchOrdersInsights(params?: { start?: string; end?: string }): Promise<OrdersInsights> {
+  const qs = new URLSearchParams()
+  if (params?.start) qs.set('start', params.start)
+  if (params?.end) qs.set('end', params.end)
+  const response = await fetch(`${API_BASE_URL}/stats/orders-insights${qs.toString() ? `?${qs.toString()}` : ''}`)
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  const apiResponse: ApiResponse<OrdersInsights> = await response.json()
+  if (!apiResponse.success) throw new Error(apiResponse.message || 'Failed to fetch orders insights')
+  return apiResponse.data
+}
+
+// Fetch paid sales insights (paid-only, regardless of order status)
+export async function fetchSalesInsights(params?: { start?: string; end?: string }): Promise<OrdersInsights> {
+  const qs = new URLSearchParams()
+  if (params?.start) qs.set('start', params.start)
+  if (params?.end) qs.set('end', params.end)
+  const response = await fetch(`${API_BASE_URL}/stats/sales${qs.toString() ? `?${qs.toString()}` : ''}`)
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  const apiResponse: ApiResponse<OrdersInsights> = await response.json()
+  if (!apiResponse.success) throw new Error(apiResponse.message || 'Failed to fetch sales insights')
+  return apiResponse.data
 }

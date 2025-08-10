@@ -224,6 +224,21 @@ export interface DashboardStats {
   fast_moving_items: { item_name: string; total_quantity: number }[];
 }
 
+// Orders insights (completed orders, totals, and top items)
+export interface OrdersTopItem {
+  item_name: string;
+  total_quantity: number;
+}
+
+export interface OrdersInsights {
+  start: string;
+  end: string;
+  completed_orders_count: number;
+  completed_orders_amount: number;
+  total_items_sold: number;
+  top_items: OrdersTopItem[];
+}
+
 // Category mapping
 export const CATEGORY_MAP: Record<number, string> = {
   1: "Tea",
