@@ -197,6 +197,18 @@ export interface OrdersListResponse extends ApiResponse<BackendOrder[]> {
   currentPage: number
 }
 
+// Order statistics from API
+export interface OrderStats {
+  orders_today: number;
+  daily_revenue: number;
+  monthly_revenue: number;
+  pending_orders: number;
+  unpaid_orders: number;
+  unpaid_amount: number;
+  fast_moving_items: number;
+  completed_orders: number;
+}
+
 // Category mapping
 export const CATEGORY_MAP: Record<number, string> = {
   1: "Tea",

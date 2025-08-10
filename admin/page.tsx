@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import { fetchOrderStats } from "@/lib/order-api"
 
 interface Order {
   id: string
@@ -232,6 +233,7 @@ export default function AdminPage() {
     pendingOrders: 0,
     completedOrders: 0,
   })
+  const [loadingStats, setLoadingStats] = useState(false)
   const { toast } = useToast()
 
   // Check if already logged in on component mount
@@ -245,30 +247,50 @@ export default function AdminPage() {
   // Load data from localStorage when logged in
   useEffect(() => {
     if (isLoggedIn) {
+      const loadStats = async () => {
+        try {
+          setLoadingStats(true)
+          const apiStats = await fetchOrderStats()
+          setStats((prev) => ({
+            totalOrders: apiStats.orders_today ?? prev.totalOrders,
+            totalRevenue: apiStats.daily_revenue ?? prev.totalRevenue,
+            pendingOrders: apiStats.pending_orders ?? prev.pendingOrders,
+            completedOrders: apiStats.completed_orders ?? prev.completedOrders,
+          }))
+        } catch (error) {
+          console.error('Failed to fetch stats:', error)
+          // Fallback to localStorage stats on error
+          const savedOrders = JSON.parse(localStorage.getItem("cafeOrders") || "[]")
+          const totalOrders = savedOrders?.length || 0
+          const totalRevenue = savedOrders?.reduce((sum: number, order: Order) => {
+            const orderTotal = order?.total ? Number.parseFloat(order.total) : 0
+            return sum + orderTotal
+          }, 0) || 0
+          const pendingOrders = savedOrders?.filter((order: Order) => order?.status === "pending")?.length || 0
+          const completedOrders = savedOrders?.filter((order: Order) => order?.status === "completed")?.length || 0
+
+          setStats({
+            totalOrders,
+            totalRevenue,
+            pendingOrders,
+            completedOrders,
+          })
+        } finally {
+          setLoadingStats(false)
+        }
+      }
+
+      loadStats()
+      
+      // Still load orders and specials from localStorage
       const savedOrders = JSON.parse(localStorage.getItem("cafeOrders") || "[]")
       const savedSpecials = JSON.parse(localStorage.getItem("todaysSpecials") || "[]")
-
       setOrders(savedOrders)
       setTodaysSpecials(savedSpecials)
-
-      // Calculate stats with null checks
-      const totalOrders = savedOrders?.length || 0
-      const totalRevenue =
-        savedOrders?.reduce((sum: number, order: Order) => {
-          const orderTotal = order?.total ? Number.parseFloat(order.total) : 0
-          return sum + orderTotal
-        }, 0) || 0
-      const pendingOrders = savedOrders?.filter((order: Order) => order?.status === "pending")?.length || 0
-      const completedOrders = savedOrders?.filter((order: Order) => order?.status === "completed")?.length || 0
-
-      setStats({
-        totalOrders,
-        totalRevenue,
-        pendingOrders,
-        completedOrders,
-      })
     }
   }, [isLoggedIn])
+
+  // Note: stats are fetched in the effect above; no duplicate calls
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
@@ -772,3 +794,4 @@ export default function AdminPage() {
     </div>
   )
 }
+

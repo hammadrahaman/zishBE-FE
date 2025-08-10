@@ -36,6 +36,10 @@ import { fetchMenuItems } from "@/lib/api"
 import { MenuItem } from "@/lib/types"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
+interface OrderStats {
+    orders_today: number;
+}
+
 // Helper function to convert menu item name to file name
 function getImageFileName(itemName: string): string {
   return itemName
@@ -1316,7 +1320,7 @@ export default function HomePage() {
                   <Phone className="h-8 w-8 text-orange-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-800 mb-4">Phone</h3>
-                <p className="text-gray-600 font-medium text-lg">(555) 123-4567</p>
+                <p className="text-gray-600 font-medium text-lg">(906) 012-8620</p>
               </div>
             </div>
 

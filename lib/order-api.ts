@@ -2,6 +2,7 @@ import type {
   ApiResponse,
   BackendOrder,
   Order,
+  OrderStats,
   OrderSubmission,
   OrderStatusUpdate,
   PaymentStatusUpdate,
@@ -292,5 +293,37 @@ export async function cancelOrder(orderId: string, cancellation: OrderCancellati
   } catch (error) {
     console.error('Error cancelling order:', error);
     throw error;
+  }
+} 
+
+// Add this function to fetch order stats
+export async function fetchOrderStats(): Promise<OrderStats> {
+  try {
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token")
+
+    // Correct path based on backend route: router.get('/stats/orders', ...)
+    // and orders router mounted at /api/v1/orders
+    const response = await fetch(`${API_BASE_URL}/orders/stats/orders`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+}
+
+    const apiResponse: ApiResponse<OrderStats> = await response.json()
+
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.message || "Failed to fetch order statistics")
+    }
+
+    return apiResponse.data
+  } catch (error) {
+    console.error("Error fetching order statistics:", error)
+    throw error
   }
 } 

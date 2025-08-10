@@ -40,6 +40,7 @@ import { RequiredInventory } from "@/components/required-inventory"
 import { InventoryInsights } from "@/components/inventory-insights"
 import { FeedbackManagement } from "@/components/feedback-management"
 import { OrderManagement } from "@/components/order-management"
+import { fetchOrderStats } from "@/lib/order-api"
 
 interface Order {
   id: string
@@ -58,6 +59,9 @@ interface Order {
   paymentStatus: string
   date: string
   timestamp: string
+  // Legacy fields for older saved orders (to keep code compatible)
+  item?: string
+  quantity?: number
 }
 
 interface Special {
@@ -93,6 +97,8 @@ export default function AdminPage() {
     category: "",
     description: "",
   })
+  // Orders Today from API (superadmin dashboard)
+  const [ordersTodayApi, setOrdersTodayApi] = useState<number | null>(null)
   const [showAddSpecial, setShowAddSpecial] = useState(false)
   const { toast } = useToast()
 
@@ -849,6 +855,24 @@ export default function AdminPage() {
     }
   }, [isLoggedIn])
 
+  // Fetch Orders Today from backend when logged in (no UI changes)
+  useEffect(() => {
+    if (!isLoggedIn || userType !== "superadmin") return;
+    const fetchStats = async () => {
+      try {
+        const stats = await fetchOrderStats();
+        setOrdersTodayApi(stats.orders_today ?? 0);
+      } catch (e) {
+        console.error("Failed to refresh order stats:", e);
+      }
+    };
+
+    // Call once immediately, then poll
+    fetchStats();
+    const id = setInterval(fetchStats, 2 * 60 * 1000); // 2 minutes
+    return () => clearInterval(id);
+  }, [isLoggedIn, userType]);
+
   const loadOrders = () => {
     try {
       const savedOrders = JSON.parse(localStorage.getItem("cafeOrders") || "[]")
@@ -1088,7 +1112,7 @@ export default function AdminPage() {
   
   // Daily stats - only count PAID orders for revenue
   const todayOrders = orders?.filter((order) => new Date(order.timestamp).toDateString() === today) || []
-  const totalOrdersToday = todayOrders.length
+  const totalOrdersToday = (ordersTodayApi ?? todayOrders.length)
   
   // Filter only PAID orders for daily revenue
   const todayPaidOrders = todayOrders.filter((order) => 
