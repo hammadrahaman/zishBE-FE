@@ -9,6 +9,7 @@ import type {
   OrderCancellation,
   OrdersListResponse,
   RevenueStats,
+  DashboardStats,
 } from './types'
 
 // API Configuration
@@ -354,4 +355,48 @@ export async function fetchRevenueStats(): Promise<RevenueStats> {
     console.error('Error fetching revenue statistics:', error);
     throw error;
   }
+}
+
+// Fetch dashboard stats (pending, unpaid counts and amount, completed, fast-moving top 20)
+export async function fetchDashboardStats(): Promise<DashboardStats> {
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const response = await fetch(`${API_BASE_URL}/stats/dashboard`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const apiResponse: ApiResponse<DashboardStats> = await response.json();
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.message || 'Failed to fetch dashboard statistics');
+    }
+    return apiResponse.data;
+  } catch (error) {
+    console.error('Error fetching dashboard statistics:', error);
+    throw error;
+  }
+}
+
+// Download dashboard CSV export
+export async function downloadDashboardExport(): Promise<void> {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const response = await fetch(`${API_BASE_URL}/stats/dashboard/export`, {
+    method: 'GET',
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cafe-dashboard-export-${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }

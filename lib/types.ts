@@ -215,6 +215,15 @@ export interface RevenueStats {
   monthly_revenue: number;
 }
 
+// Dashboard stats (for /stats/dashboard)
+export interface DashboardStats {
+  pending_orders: number;
+  unpaid_orders: number;
+  unpaid_amount: number;
+  completed_orders: number;
+  fast_moving_items: { item_name: string; total_quantity: number }[];
+}
+
 // Category mapping
 export const CATEGORY_MAP: Record<number, string> = {
   1: "Tea",

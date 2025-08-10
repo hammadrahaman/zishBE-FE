@@ -40,7 +40,7 @@ import { RequiredInventory } from "@/components/required-inventory"
 import { InventoryInsights } from "@/components/inventory-insights"
 import { FeedbackManagement } from "@/components/feedback-management"
 import { OrderManagement } from "@/components/order-management"
-import { fetchOrderStats, fetchRevenueStats } from "@/lib/order-api"
+import { fetchOrderStats, fetchRevenueStats, fetchDashboardStats, downloadDashboardExport } from "@/lib/order-api"
 
 interface Order {
   id: string
@@ -101,6 +101,11 @@ export default function AdminPage() {
   const [ordersTodayApi, setOrdersTodayApi] = useState<number | null>(null)
   const [dailyRevenueApi, setDailyRevenueApi] = useState<number | null>(null)
   const [monthlyRevenueApi, setMonthlyRevenueApi] = useState<number | null>(null)
+  const [pendingOrdersApi, setPendingOrdersApi] = useState<number | null>(null)
+  const [unpaidOrdersApi, setUnpaidOrdersApi] = useState<number | null>(null)
+  const [unpaidAmountApi, setUnpaidAmountApi] = useState<number | null>(null)
+  const [completedOrdersApi, setCompletedOrdersApi] = useState<number | null>(null)
+  const [fastMovingTopQtyApi, setFastMovingTopQtyApi] = useState<number | null>(null)
   const [showAddSpecial, setShowAddSpecial] = useState(false)
   const { toast } = useToast()
 
@@ -868,6 +873,16 @@ export default function AdminPage() {
         const revenue = await fetchRevenueStats();
         setDailyRevenueApi(revenue.daily_revenue ?? 0);
         setMonthlyRevenueApi(revenue.monthly_revenue ?? 0);
+        // Dashboard metrics
+        const dashboard = await fetchDashboardStats();
+        setPendingOrdersApi(dashboard.pending_orders ?? null);
+        setUnpaidOrdersApi(dashboard.unpaid_orders ?? null);
+        setUnpaidAmountApi(dashboard.unpaid_amount ?? null);
+        setCompletedOrdersApi(dashboard.completed_orders ?? null);
+        const topQty = Array.isArray(dashboard.fast_moving_items) && dashboard.fast_moving_items.length > 0
+          ? dashboard.fast_moving_items[0].total_quantity
+          : 0;
+        setFastMovingTopQtyApi(topQty);
       } catch (e) {
         console.error("Failed to refresh order stats:", e);
       }
@@ -1140,13 +1155,13 @@ export default function AdminPage() {
   const computedMonthlyRevenue = monthlyPaidOrders.reduce((sum, order) => sum + Number.parseFloat(order?.total || "0"), 0) || 0
   const totalMonthlyRevenue = (monthlyRevenueApi ?? computedMonthlyRevenue)
   
-  // Status-based stats
-  const pendingOrders = orders?.filter((order) => order?.status?.toLowerCase() === "pending")?.length || 0
-  const completedOrders = orders?.filter((order) => order?.status?.toLowerCase() === "completed")?.length || 0
-  const unpaidOrders = orders?.filter((order) => (order?.paymentStatus || "unpaid").toLowerCase() === "unpaid")?.length || 0
+  // Status-based stats (local fallback)
+  const pendingOrdersLocal = orders?.filter((order) => order?.status?.toLowerCase() === "pending")?.length || 0
+  const completedOrdersLocal = orders?.filter((order) => order?.status?.toLowerCase() === "completed")?.length || 0
+  const unpaidOrdersLocal = orders?.filter((order) => (order?.paymentStatus || "unpaid").toLowerCase() === "unpaid")?.length || 0
   
   // Unpaid amount calculation (remains the same)
-  const unpaidAmount = orders?.filter((order) => (order?.paymentStatus || "unpaid").toLowerCase() === "unpaid")
+  const unpaidAmountLocal = orders?.filter((order) => (order?.paymentStatus || "unpaid").toLowerCase() === "unpaid")
     .reduce((sum, order) => sum + Number.parseFloat(order?.total || "0"), 0) || 0
 
   // Fast moving products calculation (remains the same)
@@ -1171,9 +1186,24 @@ export default function AdminPage() {
     ? Object.entries(productCounts).reduce((a, b) => a[1] > b[1] ? a : b)
     : ["No orders yet", 0]
 
-  const exportToExcel = () => {
+  // Prefer API values when available; otherwise use local calculations
+  const pendingOrders = pendingOrdersApi ?? pendingOrdersLocal
+  const completedOrders = completedOrdersApi ?? completedOrdersLocal
+  const unpaidOrders = unpaidOrdersApi ?? unpaidOrdersLocal
+  const unpaidAmount = (unpaidAmountApi ?? unpaidAmountLocal)
+  const fastMovingTopQty = fastMovingTopQtyApi ?? (fastMovingProduct?.[1] as number)
+
+  const exportToExcel = async () => {
     try {
-      // Create comprehensive data for export
+      // First try server-side CSV export API; fallback to client CSV on error
+      try {
+        await downloadDashboardExport();
+        return;
+      } catch (e) {
+        console.warn("API export failed, falling back to client CSV:", e);
+      }
+
+      // Create comprehensive data for export (client fallback)
       const exportData = []
       
       // Add summary statistics
@@ -1191,10 +1221,10 @@ export default function AdminPage() {
       exportData.push(['Monthly Revenue (Paid Only):', `₹${totalMonthlyRevenue.toFixed(2)}`])
       exportData.push([''])
       exportData.push(['ORDER STATUS'])
-      exportData.push(['Pending Orders:', pendingOrders])
-      exportData.push(['Completed Orders:', completedOrders])
-      exportData.push(['Unpaid Orders:', unpaidOrders])
-      exportData.push(['Unpaid Amount:', `₹${unpaidAmount.toFixed(2)}`])
+       exportData.push(['Pending Orders:', pendingOrders])
+       exportData.push(['Completed Orders:', completedOrders])
+       exportData.push(['Unpaid Orders:', unpaidOrders])
+       exportData.push(['Unpaid Amount:', `₹${unpaidAmount.toFixed(2)}`])
       exportData.push([''])
       
       // Add revenue breakdown
