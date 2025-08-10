@@ -8,6 +8,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Package2,
@@ -41,6 +51,7 @@ export function InventoryItems({ userType }: InventoryItemsProps) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const { toast } = useToast()
@@ -60,10 +71,31 @@ export function InventoryItems({ userType }: InventoryItemsProps) {
     "Spices", "Tea/Coffee", "Cleaning", "Packaging", "Other"
   ]
 
-  // Load inventory items from localStorage
+  // Load inventory items from API (fallback to localStorage if API fails)
   useEffect(() => {
-    const savedItems = JSON.parse(localStorage.getItem("inventoryItems") || "[]")
-    setInventoryItems(savedItems)
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { fetchInventoryItems } = await import("@/lib/inventory-api")
+        const items = await fetchInventoryItems('all')
+        if (cancelled) return
+        const mapped = items.map(i => ({
+          id: String(i.id),
+          name: i.name,
+          unit: i.unit_label,
+          rate: i.rate,
+          category: i.category,
+          status: i.status,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }))
+        setInventoryItems(mapped)
+      } catch {
+        const savedItems = JSON.parse(localStorage.getItem("inventoryItems") || "[]")
+        if (!cancelled) setInventoryItems(savedItems)
+      }
+    })()
+    return () => { cancelled = true }
   }, [])
 
   // Apply filters and search
@@ -104,7 +136,7 @@ export function InventoryItems({ userType }: InventoryItemsProps) {
   }
 
   // Add new item
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!formData.name.trim() || !formData.unit.trim() || !formData.rate.trim()) {
       toast({
         title: "Validation Error",
@@ -125,8 +157,22 @@ export function InventoryItems({ userType }: InventoryItemsProps) {
       updatedAt: new Date().toISOString(),
     }
 
-    const updatedItems = [...inventoryItems, newItem]
-    saveInventoryItems(updatedItems)
+    try {
+      const { createInventoryItem } = await import("@/lib/inventory-api")
+      const created = await createInventoryItem({
+        name: newItem.name,
+        unit_label: newItem.unit,
+        rate: newItem.rate,
+        category: newItem.category,
+        status: newItem.status,
+        created_by: 'superadmin',
+      })
+      const updatedItems = [...inventoryItems, { ...newItem, id: String(created.id) }]
+      saveInventoryItems(updatedItems)
+    } catch {
+      const updatedItems = [...inventoryItems, newItem]
+      saveInventoryItems(updatedItems)
+    }
     setShowAddModal(false)
     resetForm()
 
@@ -137,7 +183,7 @@ export function InventoryItems({ userType }: InventoryItemsProps) {
   }
 
   // Edit item
-  const handleEditItem = () => {
+  const handleEditItem = async () => {
     if (!editingItem || !formData.name.trim() || !formData.unit.trim() || !formData.rate.trim()) {
       toast({
         title: "Validation Error",
@@ -157,9 +203,17 @@ export function InventoryItems({ userType }: InventoryItemsProps) {
       updatedAt: new Date().toISOString(),
     }
 
-    const updatedItems = inventoryItems.map(item => 
-      item.id === editingItem.id ? updatedItem : item
-    )
+    try {
+      const { updateInventoryItem } = await import("@/lib/inventory-api")
+      await updateInventoryItem(Number(editingItem.id), {
+        name: updatedItem.name,
+        unit_label: updatedItem.unit,
+        rate: updatedItem.rate,
+        category: updatedItem.category,
+        status: updatedItem.status,
+      })
+    } catch {}
+    const updatedItems = inventoryItems.map(item => item.id === editingItem.id ? updatedItem : item)
     saveInventoryItems(updatedItems)
     setShowEditModal(false)
     setEditingItem(null)
@@ -172,18 +226,27 @@ export function InventoryItems({ userType }: InventoryItemsProps) {
   }
 
   // Delete item
-  const handleDeleteItem = (id: string) => {
+  const handleDeleteItem = async (id: string) => {
     const item = inventoryItems.find(item => item.id === id)
     if (!item) return
+    setDeleteTarget(item)
+  }
 
-    if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
-      const updatedItems = inventoryItems.filter(item => item.id !== id)
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    const id = deleteTarget.id
+    try {
+      const { deleteInventoryItem } = await import("@/lib/inventory-api")
+      await deleteInventoryItem(Number(id))
+      const updatedItems = inventoryItems.filter(i => i.id !== id)
       saveInventoryItems(updatedItems)
-
-      toast({
-        title: "Item Deleted",
-        description: `${item.name} has been removed from inventory items.`,
-      })
+      toast({ title: "Item Removed", description: `${deleteTarget.name} deleted (or marked inactive if in use).` })
+    } catch (e) {
+      const updatedItems = inventoryItems.filter(i => i.id !== id)
+      saveInventoryItems(updatedItems)
+      toast({ title: "Item Removed Locally", description: `${deleteTarget.name} removed from list.` })
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -567,6 +630,23 @@ export function InventoryItems({ userType }: InventoryItemsProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation dialog (responsive) */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
+        <AlertDialogContent className="mx-4 sm:mx-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget ? `Are you sure you want to delete "${deleteTarget.name}"?` : ''}
+              <br/>This action cannot be undone. If the item is used in orders, it will be marked inactive instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 } 

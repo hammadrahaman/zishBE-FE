@@ -46,10 +46,35 @@ export function RequiredInventory({ userType }: RequiredInventoryProps) {
   const [userFilter, setUserFilter] = useState("all")
   const { toast } = useToast()
 
-  // Load data from localStorage
+  // Load data from API (fallback to localStorage)
   useEffect(() => {
-    const savedOrders = JSON.parse(localStorage.getItem("inventoryOrders") || "[]")
-    setInventoryOrders(savedOrders)
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { listInventoryOrders } = await import("@/lib/inventory-api")
+        const orders = await listInventoryOrders({ status: 'all' })
+        if (cancelled) return
+        const flat = orders.flatMap(o => o.items.map((li, idx) => ({
+          id: `${o.id}-${idx}`,
+          itemId: '',
+          itemName: li.itemName,
+          unit: li.unit,
+          rate: li.rate,
+          quantity: li.quantity,
+          totalAmount: li.lineAmount,
+          notes: '',
+          status: o.status === 'purchased' ? 'purchased' : 'pending',
+          orderedBy: o.ordered_by,
+          orderDate: o.ordered_at,
+          createdAt: o.ordered_at,
+        })))
+        setInventoryOrders(flat)
+      } catch {
+        const savedOrders = JSON.parse(localStorage.getItem("inventoryOrders") || "[]")
+        if (!cancelled) setInventoryOrders(savedOrders)
+      }
+    })()
+    return () => { cancelled = true }
   }, [])
 
   // Apply filters and search
@@ -81,7 +106,7 @@ export function RequiredInventory({ userType }: RequiredInventoryProps) {
   }, [inventoryOrders, searchTerm, statusFilter, userFilter])
 
   // Update order status
-  const updateOrderStatus = (orderId: string, newStatus: "pending" | "purchased") => {
+  const updateOrderStatus = async (orderId: string, newStatus: "pending" | "purchased") => {
     const updatedOrders = inventoryOrders.map(order => 
       order.id === orderId 
         ? { ...order, status: newStatus }
@@ -90,6 +115,15 @@ export function RequiredInventory({ userType }: RequiredInventoryProps) {
     
     setInventoryOrders(updatedOrders)
     localStorage.setItem("inventoryOrders", JSON.stringify(updatedOrders))
+    try {
+      if (newStatus === 'purchased') {
+        const { markInventoryOrderPurchased } = await import("@/lib/inventory-api")
+        const idNum = Number(orderId.split('-')[0])
+        if (!Number.isNaN(idNum)) {
+          await markInventoryOrderPurchased(idNum, 'superadmin')
+        }
+      }
+    } catch {}
 
     const order = inventoryOrders.find(o => o.id === orderId)
     toast({

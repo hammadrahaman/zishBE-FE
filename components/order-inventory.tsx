@@ -73,12 +73,47 @@ export function OrderInventory({ userType, currentUser }: OrderInventoryProps) {
   const [orderNotes, setOrderNotes] = useState("")
   const { toast } = useToast()
 
-  // Load data from localStorage
+  // Load items and orders from API (fallback to localStorage)
   useEffect(() => {
-    const savedItems = JSON.parse(localStorage.getItem("inventoryItems") || "[]")
-    const savedOrders = JSON.parse(localStorage.getItem("inventoryOrders") || "[]")
-    setInventoryItems(savedItems)
-    setInventoryOrders(savedOrders)
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { fetchInventoryItems, listInventoryOrders } = await import("@/lib/inventory-api")
+        const [items, orders] = await Promise.all([
+          fetchInventoryItems('active'),
+          listInventoryOrders({ user: currentUser, status: 'all' })
+        ])
+        if (cancelled) return
+        const mappedItems = items.map(i => ({
+          id: String(i.id), name: i.name, unit: i.unit_label, rate: i.rate, category: i.category,
+          status: i.status, createdAt: '', updatedAt: ''
+        }))
+        setInventoryItems(mappedItems)
+        const mappedOrders = orders.flatMap(o => o.items.map((li, idx) => ({
+          id: `${o.id}-${idx}`,
+          itemId: '',
+          itemName: li.itemName,
+          unit: li.unit,
+          rate: li.rate,
+          quantity: li.quantity,
+          totalAmount: li.lineAmount,
+          notes: '',
+          status: o.status === 'purchased' ? 'purchased' : 'pending',
+          orderedBy: o.ordered_by,
+          orderDate: o.ordered_at,
+          createdAt: o.ordered_at,
+        })))
+        setInventoryOrders(mappedOrders)
+      } catch {
+        const savedItems = JSON.parse(localStorage.getItem("inventoryItems") || "[]")
+        const savedOrders = JSON.parse(localStorage.getItem("inventoryOrders") || "[]")
+        if (!cancelled) {
+          setInventoryItems(savedItems)
+          setInventoryOrders(savedOrders)
+        }
+      }
+    })()
+    return () => { cancelled = true }
   }, [])
 
   // Apply filters and search
@@ -158,7 +193,7 @@ export function OrderInventory({ userType, currentUser }: OrderInventoryProps) {
   }
 
   // Place cart order
-  const handlePlaceCartOrder = () => {
+  const handlePlaceCartOrder = async () => {
     if (cart.length === 0) {
       toast({
         title: "Empty Cart",
@@ -183,6 +218,14 @@ export function OrderInventory({ userType, currentUser }: OrderInventoryProps) {
       createdAt: new Date().toISOString(),
     }))
 
+    try {
+      const { placeInventoryOrder } = await import("@/lib/inventory-api")
+      await placeInventoryOrder({
+        ordered_by: currentUser,
+        notes: orderNotes || undefined,
+        items: cart.map(ci => ({ inventory_item_id: Number(ci.id), quantity: ci.quantity }))
+      })
+    } catch {}
     const updatedOrders = [...inventoryOrders, ...newOrders]
     setInventoryOrders(updatedOrders)
     localStorage.setItem("inventoryOrders", JSON.stringify(updatedOrders))
