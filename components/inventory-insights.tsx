@@ -23,6 +23,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { fetchOrdersInsights, fetchSalesInsights } from "@/lib/order-api"
+import { fetchInventoryExpensesInsights } from "@/lib/inventory-api"
 
 interface InventoryOrder {
   id: string
@@ -63,6 +64,8 @@ export function InventoryInsights({ userType }: InventoryInsightsProps) {
   const [ordersInsights, setOrdersInsights] = useState<{ completed_orders_count: number; completed_orders_amount: number; total_items_sold: number; top_items: { item_name: string; total_quantity: number }[] } | null>(null)
   const [paidRevenue, setPaidRevenue] = useState<number | null>(null)
   const [salesTopItems, setSalesTopItems] = useState<{ item_name: string; total_quantity: number }[] | null>(null)
+  const [currentMetrics, setCurrentMetrics] = useState<MonthlyMetrics | null>(null)
+  const [comparisonMetrics, setComparisonMetrics] = useState<MonthlyMetrics | null>(null)
 
   useEffect(() => {
     const savedOrders = JSON.parse(localStorage.getItem("inventoryOrders") || "[]")
@@ -127,7 +130,7 @@ export function InventoryInsights({ userType }: InventoryInsightsProps) {
     return { start: startOfMonth, end: endOfMonth }
   }
 
-  // Filter purchased orders by date range
+  // Keep local filtering helper for the detailed table (uses localStorage snapshot)
   const getFilteredPurchasedOrders = (startDate: Date, endDate: Date) => {
     return inventoryOrders.filter(order => {
       const orderDate = new Date(order.orderDate)
@@ -135,120 +138,65 @@ export function InventoryInsights({ userType }: InventoryInsightsProps) {
     })
   }
 
-  // Calculate metrics for purchased orders only
-  const calculateMetrics = (orders: InventoryOrder[]): MonthlyMetrics => {
-    if (orders.length === 0) {
-      return {
-        totalItemsPurchased: 0,
-        totalQuantityPurchased: 0,
-        totalAmountSpent: 0,
-        mostPurchasedItem: null,
-        topSpender: null,
-        uniqueItems: 0,
-        averageOrderValue: 0,
-        purchaseCount: 0,
-      }
-    }
+  // Map API insights -> MonthlyMetrics used in UI
+  const mapInsightsToMonthly = (d: any): MonthlyMetrics => ({
+    totalItemsPurchased: Number(d.total_items_purchased || 0),
+    totalQuantityPurchased: Number(d.total_quantity_purchased || 0),
+    totalAmountSpent: Number(d.total_amount_spent || 0),
+    mostPurchasedItem: d.most_purchased_item || null,
+    topSpender: d.top_spender || null,
+    uniqueItems: Number(d.unique_items || 0),
+    averageOrderValue: Number(d.average_order_value || 0),
+    purchaseCount: Number(d.purchase_count || 0),
+  })
 
-    // Calculate totals
-    const totalItemsPurchased = orders.length
-    const totalQuantityPurchased = orders.reduce((sum, o) => sum + o.quantity, 0)
-    const totalAmountSpent = orders.reduce((sum, o) => sum + o.totalAmount, 0)
-
-    // Group by item for most purchased
-    const itemQuantities: { [key: string]: { quantity: number; amount: number; name: string } } = {}
-    orders.forEach(order => {
-      if (itemQuantities[order.itemName]) {
-        itemQuantities[order.itemName].quantity += order.quantity
-        itemQuantities[order.itemName].amount += order.totalAmount
-      } else {
-        itemQuantities[order.itemName] = {
-          quantity: order.quantity,
-          amount: order.totalAmount,
-          name: order.itemName
+  // Load inventory expenses (DB) for current and comparison periods
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const now = new Date()
+        let start: string | undefined
+        let end: string | undefined
+        if (dateFilter === 'thisMonth') {
+          const s = new Date(now.getFullYear(), now.getMonth(), 1)
+          const e = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+          start = s.toISOString().slice(0,10)
+          end = e.toISOString().slice(0,10)
+        } else if (dateFilter === 'lastMonth') {
+          const s = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+          const e = new Date(now.getFullYear(), now.getMonth(), 0)
+          start = s.toISOString().slice(0,10)
+          end = e.toISOString().slice(0,10)
+        } else if (dateFilter === 'custom' && customStartDate && customEndDate) {
+          start = customStartDate
+          end = customEndDate
         }
-      }
-    })
 
-    const itemEntries = Object.values(itemQuantities)
-    const mostPurchasedItem = itemEntries.length > 0 
-      ? itemEntries.reduce((max, current) => current.amount > max.amount ? current : max)
-      : null
-
-    // Group by user for top spender
-    const userSpending: { [key: string]: { amount: number; orders: number } } = {}
-    orders.forEach(order => {
-      if (userSpending[order.orderedBy]) {
-        userSpending[order.orderedBy].amount += order.totalAmount
-        userSpending[order.orderedBy].orders += 1
-      } else {
-        userSpending[order.orderedBy] = {
-          amount: order.totalAmount,
-          orders: 1
+        if (start && end) {
+          const current = await fetchInventoryExpensesInsights({ start, end })
+          setCurrentMetrics(mapInsightsToMonthly(current))
+        } else {
+          setCurrentMetrics(null)
         }
+
+        if (dateFilter !== 'custom') {
+          const offset = dateFilter === 'lastMonth' ? -2 : -1
+          const cmp = getMonthRange(offset)
+          const cmpStart = cmp.start.toISOString().slice(0,10)
+          const cmpEnd = cmp.end.toISOString().slice(0,10)
+          const comparison = await fetchInventoryExpensesInsights({ start: cmpStart, end: cmpEnd })
+          setComparisonMetrics(mapInsightsToMonthly(comparison))
+        } else {
+          setComparisonMetrics(null)
+        }
+      } catch (e) {
+        setCurrentMetrics(null)
+        setComparisonMetrics(null)
       }
-    })
-
-    const userEntries = Object.entries(userSpending)
-    const topSpender = userEntries.length > 0
-      ? userEntries.reduce((max, current) => current[1].amount > max[1].amount ? current : max)
-      : null
-
-    return {
-      totalItemsPurchased,
-      totalQuantityPurchased,
-      totalAmountSpent,
-      mostPurchasedItem,
-      topSpender: topSpender ? { name: topSpender[0], amount: topSpender[1].amount, orders: topSpender[1].orders } : null,
-      uniqueItems: Object.keys(itemQuantities).length,
-      averageOrderValue: totalAmountSpent / totalItemsPurchased,
-      purchaseCount: totalItemsPurchased,
     }
-  }
-
-  // Get current period data
-  const getCurrentPeriodData = () => {
-    let startDate: Date, endDate: Date
-
-    switch (dateFilter) {
-      case "thisMonth":
-        const thisMonth = getMonthRange(0)
-        startDate = thisMonth.start
-        endDate = thisMonth.end
-        break
-      case "lastMonth":
-        const lastMonth = getMonthRange(-1)
-        startDate = lastMonth.start
-        endDate = lastMonth.end
-        break
-      case "custom":
-        if (!customStartDate || !customEndDate) return null
-        startDate = new Date(customStartDate)
-        endDate = new Date(customEndDate + "T23:59:59")
-        break
-      default:
-        return null
-    }
-
-    const filteredOrders = getFilteredPurchasedOrders(startDate, endDate)
-    return calculateMetrics(filteredOrders)
-  }
-
-  // Get comparison data (previous month)
-  const getComparisonData = () => {
-    let comparisonOffset = -1
-    
-    if (dateFilter === "lastMonth") {
-      comparisonOffset = -2 // Compare last month with month before that
-    }
-
-    const comparisonRange = getMonthRange(comparisonOffset)
-    const comparisonOrders = getFilteredPurchasedOrders(comparisonRange.start, comparisonRange.end)
-    return calculateMetrics(comparisonOrders)
-  }
-
-  const currentMetrics = getCurrentPeriodData()
-  const comparisonMetrics = dateFilter !== "custom" ? getComparisonData() : null
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFilter, customStartDate, customEndDate])
 
   // Export functions
   const exportToCSV = () => {

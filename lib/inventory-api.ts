@@ -110,3 +110,36 @@ export async function markInventoryOrderPurchased(id: number, purchased_by: stri
 }
 
 
+export interface InventoryExpensesInsightsDto {
+  total_items_purchased: number
+  total_quantity_purchased: number
+  total_amount_spent: number
+  unique_items: number
+  average_order_value: number
+  purchase_count: number
+  most_purchased_item: { name: string; quantity: number; amount: number } | null
+  top_spender: { name: string; amount: number; orders: number } | null
+}
+
+export async function fetchInventoryExpensesInsights(params?: { start?: string; end?: string }): Promise<InventoryExpensesInsightsDto> {
+  const qs = new URLSearchParams()
+  if (params?.start) qs.set('start', params.start)
+  if (params?.end) qs.set('end', params.end)
+  const res = await fetch(`${API_BASE_URL}/inventory/insights${qs.toString() ? `?${qs.toString()}` : ''}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data: ApiResponse<InventoryExpensesInsightsDto> = await res.json()
+  if (!data.success) throw new Error(data.message || 'Failed to load inventory insights')
+  return data.data
+}
+
+export async function downloadInventoryExpensesCsv(params?: { start?: string; end?: string }): Promise<void> {
+  const qs = new URLSearchParams()
+  if (params?.start) qs.set('start', params.start)
+  if (params?.end) qs.set('end', params.end)
+  const url = `${API_BASE_URL}/inventory/insights/export${qs.toString() ? `?${qs.toString()}` : ''}`
+  const a = document.createElement('a')
+  a.href = url
+  a.download = ''
+  a.click()
+}
+
