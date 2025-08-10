@@ -209,6 +209,12 @@ export interface OrderStats {
   completed_orders: number;
 }
 
+// Revenue-only stats (for /stats/revenue)
+export interface RevenueStats {
+  daily_revenue: number;
+  monthly_revenue: number;
+}
+
 // Category mapping
 export const CATEGORY_MAP: Record<number, string> = {
   1: "Tea",

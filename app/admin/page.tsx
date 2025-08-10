@@ -40,7 +40,7 @@ import { RequiredInventory } from "@/components/required-inventory"
 import { InventoryInsights } from "@/components/inventory-insights"
 import { FeedbackManagement } from "@/components/feedback-management"
 import { OrderManagement } from "@/components/order-management"
-import { fetchOrderStats } from "@/lib/order-api"
+import { fetchOrderStats, fetchRevenueStats } from "@/lib/order-api"
 
 interface Order {
   id: string
@@ -99,6 +99,8 @@ export default function AdminPage() {
   })
   // Orders Today from API (superadmin dashboard)
   const [ordersTodayApi, setOrdersTodayApi] = useState<number | null>(null)
+  const [dailyRevenueApi, setDailyRevenueApi] = useState<number | null>(null)
+  const [monthlyRevenueApi, setMonthlyRevenueApi] = useState<number | null>(null)
   const [showAddSpecial, setShowAddSpecial] = useState(false)
   const { toast } = useToast()
 
@@ -862,6 +864,10 @@ export default function AdminPage() {
       try {
         const stats = await fetchOrderStats();
         setOrdersTodayApi(stats.orders_today ?? 0);
+        // Fetch paid-only revenue
+        const revenue = await fetchRevenueStats();
+        setDailyRevenueApi(revenue.daily_revenue ?? 0);
+        setMonthlyRevenueApi(revenue.monthly_revenue ?? 0);
       } catch (e) {
         console.error("Failed to refresh order stats:", e);
       }
@@ -1118,7 +1124,8 @@ export default function AdminPage() {
   const todayPaidOrders = todayOrders.filter((order) => 
     (order?.paymentStatus || "unpaid").toLowerCase() !== "unpaid"
   )
-  const totalRevenueToday = todayPaidOrders.reduce((sum, order) => sum + Number.parseFloat(order?.total || "0"), 0) || 0
+  const computedDailyRevenue = todayPaidOrders.reduce((sum, order) => sum + Number.parseFloat(order?.total || "0"), 0) || 0
+  const totalRevenueToday = (dailyRevenueApi ?? computedDailyRevenue)
   
   // Monthly stats - only count PAID orders for revenue
   const monthlyOrders = orders?.filter((order) => {
@@ -1130,7 +1137,8 @@ export default function AdminPage() {
   const monthlyPaidOrders = monthlyOrders.filter((order) => 
     (order?.paymentStatus || "unpaid").toLowerCase() !== "unpaid"
   )
-  const totalMonthlyRevenue = monthlyPaidOrders.reduce((sum, order) => sum + Number.parseFloat(order?.total || "0"), 0) || 0
+  const computedMonthlyRevenue = monthlyPaidOrders.reduce((sum, order) => sum + Number.parseFloat(order?.total || "0"), 0) || 0
+  const totalMonthlyRevenue = (monthlyRevenueApi ?? computedMonthlyRevenue)
   
   // Status-based stats
   const pendingOrders = orders?.filter((order) => order?.status?.toLowerCase() === "pending")?.length || 0
