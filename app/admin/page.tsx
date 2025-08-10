@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
@@ -27,6 +29,7 @@ import {
   Download,
   Plus,
   MessageSquare,
+  ChevronsUpDown,
   Package2,
   ShoppingCart,
   ClipboardList,
@@ -34,6 +37,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import { fetchMenuItems } from "@/lib/api"
 import { InventoryItems } from "@/components/inventory-items"
 import { OrderInventory } from "@/components/order-inventory"
 import { RequiredInventory } from "@/components/required-inventory"
@@ -824,6 +828,8 @@ export default function AdminPage() {
     },
   ])
   const [selectedExistingItem, setSelectedExistingItem] = useState("")
+  const [allMenuItems, setAllMenuItems] = useState<any[]>([])
+  const [existingItemOpen, setExistingItemOpen] = useState(false)
 
   // Add hydration safety
   const [isClient, setIsClient] = useState(false)
@@ -913,6 +919,28 @@ export default function AdminPage() {
       setTodaysSpecials([])
     }
   }
+
+  // Load all menu items for combobox (once on mount)
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const items = await fetchMenuItems()
+        // Normalize shape to match existing menu option renderer
+        const normalized = items.map((i: any) => ({
+          id: i.id,
+          name: i.name,
+          price: i.price,
+          category: i.category,
+        }))
+        setAllMenuItems(normalized)
+      } catch (e) {
+        // Fallback to static list if API fails
+        setAllMenuItems(existingMenuItems as any)
+      }
+    }
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
@@ -1703,7 +1731,17 @@ export default function AdminPage() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {todaysSpecials?.map((special) => (
-                      <div key={special?.id} className="border rounded-lg p-4 bg-white shadow-sm">
+                      <div key={special?.id} className="relative border rounded-lg p-4 bg-white shadow-sm">
+                        {(userType === "admin" || userType === "superadmin") && (
+                          <button
+                            type="button"
+                            aria-label="Remove special"
+                            onClick={() => removeSpecial(special.id)}
+                            className="absolute top-2 right-2 text-gray-400 hover:text-red-600"
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </button>
+                        )}
                         <img
                           src={special?.image || "/placeholder.svg"}
                           alt={special?.name || "Special"}
@@ -1734,22 +1772,39 @@ export default function AdminPage() {
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="existingItem">Select Existing Item (Optional)</Label>
-                    <Select
-                      value={selectedExistingItem || "create-new"}
-                      onValueChange={handleExistingItemSelect}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose from existing menu items" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="create-new">Create New Item</SelectItem>
-                        {existingMenuItems.map((item) => (
-                          <SelectItem key={item.id} value={item.id.toString()}>
-                            {item.name} - ₹{item.price} ({item.category})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover open={existingItemOpen} onOpenChange={setExistingItemOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={existingItemOpen}
+                          className="w-full justify-between"
+                        >
+                          {(() => {
+                            if (!selectedExistingItem || selectedExistingItem === "create-new") return "Create New Item"
+                            const chosen = [...allMenuItems, ...existingMenuItems as any].find((i: any) => i.id?.toString() === selectedExistingItem)
+                            return chosen ? `${chosen.name} - ₹${chosen.price} (${chosen.category})` : "Create New Item"
+                          })()}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="p-0 w-[--radix-popover-trigger-width]">
+                        <Command>
+                          <CommandInput placeholder="Search menu items..." />
+                          <CommandEmpty>No item found.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem value="create-new" onSelect={() => { handleExistingItemSelect("create-new") ; setExistingItemOpen(false) }}>
+                              Create New Item
+                            </CommandItem>
+                            { (allMenuItems.length ? allMenuItems : (existingMenuItems as any)).map((item: any) => (
+                              <CommandItem key={item.id} value={`${item.name} - ₹${item.price} (${item.category})`} onSelect={() => { handleExistingItemSelect(item.id.toString()); setExistingItemOpen(false) }}>
+                                {item.name} - ₹{item.price} ({item.category})
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div>
                     <Label htmlFor="specialName">Name</Label>
