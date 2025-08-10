@@ -43,6 +43,8 @@ export function OrderManagement({ userType }: OrderManagementProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
+  const [searchOrderId, setSearchOrderId] = useState("")
+  const [searchCustomerName, setSearchCustomerName] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [paymentFilter, setPaymentFilter] = useState("all")
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
@@ -50,7 +52,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
-  const [updatingOrders, setUpdatingOrders] = useState<Set<string>>(new Set())
+  const [updatingOrders, setUpdatingOrders] = useState<Set<number>>(new Set())
   const { toast } = useToast()
 
   // Helper function to map backend status to frontend display status
@@ -77,6 +79,8 @@ export function OrderManagement({ userType }: OrderManagementProps) {
         status: statusFilter !== "all" ? statusFilter : undefined,
         paymentStatus: paymentFilter !== "all" ? paymentFilter : undefined,
         phone: searchTerm.trim() || undefined,
+        orderId: searchOrderId.trim() || undefined,
+        customerName: searchCustomerName.trim() || undefined,
         sortBy: 'order_date',
         order: 'desc',
         includeCancelled: true
@@ -122,7 +126,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
 
       return () => clearTimeout(timeoutId)
     }
-  }, [searchTerm, statusFilter, paymentFilter, userType])
+  }, [searchTerm, searchOrderId, searchCustomerName, statusFilter, paymentFilter, userType])
 
   // First, add useEffect to load orders when page changes
   useEffect(() => {
@@ -132,23 +136,18 @@ export function OrderManagement({ userType }: OrderManagementProps) {
   }, [currentPage]) // Add currentPage to dependency array
 
   // Helper functions for status updates
-  const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+  const handleStatusUpdate = async (orderId: number, newStatus: string) => {
     try {
       setUpdatingOrders(prev => new Set(prev).add(orderId))
       
       // Update local state immediately for better UX
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
-          order.id === orderId 
-            ? { ...order, orderStatus: mapFrontendToBackendStatus(newStatus) }
-            : order
-        )
-      )
+      const statusForLocal = mapFrontendToBackendStatus(newStatus) as Order['orderStatus']
+      setOrders(prevOrders => prevOrders.map(order => order.id === Number(orderId) ? { ...order, orderStatus: statusForLocal } : order))
 
       // Map frontend status to backend status
       const backendStatus = mapFrontendToBackendStatus(newStatus)
       
-      await updateOrderStatus(orderId, { 
+      await updateOrderStatus(String(orderId), { 
         status: backendStatus as 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled',
         changedBy: 'admin'
       })
@@ -179,7 +178,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
   }
 
   const handlePaymentUpdate = async (
-    orderId: string,
+    orderId: number,
     newStatus: 'pending' | 'paid_cash' | 'paid_upi'
   ) => {
     try {
@@ -192,13 +191,9 @@ export function OrderManagement({ userType }: OrderManagementProps) {
         newStatus === 'paid_cash' ? 'cash' : newStatus === 'paid_upi' ? 'upi' : undefined
 
       // Optimistic update (use backend shape so selection sticks on reload)
-      setOrders(prev =>
-        prev.map(o =>
-          o.id === orderId ? { ...o, paymentStatus: backendStatus, paymentMethod: backendMethod } : o
-        )
-      )
+      setOrders(prev => prev.map(o => o.id === Number(orderId) ? { ...o, paymentStatus: backendStatus, paymentMethod: backendMethod } : o))
 
-      await updatePaymentStatus(orderId, {
+      await updatePaymentStatus(String(orderId), {
         paymentStatus: backendStatus,
         paymentMethod: backendMethod
       })
@@ -228,11 +223,11 @@ export function OrderManagement({ userType }: OrderManagementProps) {
     }
   }
 
-  const handleCancelOrder = async (orderId: string, reason: string) => {
+  const handleCancelOrder = async (orderId: number, reason: string) => {
     try {
       setUpdatingOrders(prev => new Set(prev).add(orderId))
       
-      await cancelOrder(orderId, { 
+      await cancelOrder(String(orderId), { 
         reason,
         cancelledBy: 'admin'
       })
@@ -349,7 +344,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Search by Phone</Label>
               <div className="relative">
@@ -358,6 +353,30 @@ export function OrderManagement({ userType }: OrderManagementProps) {
                   placeholder="Enter customer phone number..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Search by Order Number</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder="Enter order number..."
+                  value={searchOrderId}
+                  onChange={(e) => setSearchOrderId(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Search by Name</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder="Enter customer name..."
+                  value={searchCustomerName}
+                  onChange={(e) => setSearchCustomerName(e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -374,7 +393,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
                   <SelectItem value="confirmed">Confirmed</SelectItem>
                   <SelectItem value="preparing">Preparing</SelectItem>
                   <SelectItem value="ready">Ready</SelectItem>
-                  <SelectItem value="delivered">Delivered</SelectItem>
+                  <SelectItem value="delivered">Completed</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
@@ -387,13 +406,29 @@ export function OrderManagement({ userType }: OrderManagementProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Payments</SelectItem>
-                  <SelectItem value="pending">Payment Pending</SelectItem>
+                  <SelectItem value="pending">Unpaid</SelectItem>
                   <SelectItem value="paid">Paid</SelectItem>
                   <SelectItem value="failed">Failed</SelectItem>
                   <SelectItem value="refunded">Refunded</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchTerm("")
+                setSearchOrderId("")
+                setSearchCustomerName("")
+                setStatusFilter("all")
+                setPaymentFilter("all")
+                setCurrentPage(1)
+                loadOrders(1)
+              }}
+            >
+              Clear Filters
+            </Button>
           </div>
         </CardContent>
       </Card>

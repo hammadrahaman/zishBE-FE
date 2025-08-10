@@ -126,10 +126,15 @@ export async function fetchAllOrders(params?: {
   limit?: number
   status?: string
   paymentStatus?: string
+  paymentMethod?: string
   phone?: string
+  customerName?: string
   sortBy?: string
   order?: string
   includeCancelled?: boolean
+  orderId?: string | number
+  orderNumber?: string | number
+  item?: string
 }): Promise<{
   orders: Order[]
   totalCount: number
@@ -143,9 +148,14 @@ export async function fetchAllOrders(params?: {
     if (params?.status) queryParams.append('status', params.status)
     if (params?.paymentStatus) queryParams.append('paymentStatus', params.paymentStatus)
     if (params?.phone) queryParams.append('phone', params.phone)
+    if (params?.customerName) queryParams.append('customerName', params.customerName)
+    if (params?.paymentMethod) queryParams.append('paymentMethod', params.paymentMethod)
     if (params?.sortBy) queryParams.append('sortBy', params.sortBy)
     if (params?.order) queryParams.append('order', params.order)
     if (params?.includeCancelled !== undefined) queryParams.append('includeCancelled', params.includeCancelled.toString())
+    if (params?.orderId !== undefined) queryParams.append('orderId', String(params.orderId))
+    if (params?.orderNumber !== undefined) queryParams.append('orderNumber', String(params.orderNumber))
+    if (params?.item) queryParams.append('item', params.item)
 
     const url = `${API_BASE_URL}/orders${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
 
