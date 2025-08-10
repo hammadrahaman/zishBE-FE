@@ -868,14 +868,14 @@ export default function AdminPage() {
     }
   }, [isLoggedIn])
 
-  // Fetch Orders Today from backend when logged in (no UI changes)
+  // Fetch Orders Today from backend when logged in (one-time; no polling)
   useEffect(() => {
     if (!isLoggedIn || userType !== "superadmin") return;
     const fetchStats = async () => {
       try {
         const stats = await fetchOrderStats();
         setOrdersTodayApi(stats.orders_today ?? 0);
-        // Fetch paid-only revenue
+        // Paid-only revenue
         const revenue = await fetchRevenueStats();
         setDailyRevenueApi(revenue.daily_revenue ?? 0);
         setMonthlyRevenueApi(revenue.monthly_revenue ?? 0);
@@ -893,11 +893,8 @@ export default function AdminPage() {
         console.error("Failed to refresh order stats:", e);
       }
     };
-
-    // Call once immediately, then poll
+    // Call once (no interval)
     fetchStats();
-    const id = setInterval(fetchStats, 2 * 60 * 1000); // 2 minutes
-    return () => clearInterval(id);
   }, [isLoggedIn, userType]);
 
   const loadOrders = () => {
@@ -1034,7 +1031,9 @@ export default function AdminPage() {
       return
     }
 
-    const item = existingMenuItems.find((item) => item.id.toString() === itemId)
+    // Look up from API-loaded items first, then fallback list
+    const unionItems: any[] = [...allMenuItems, ...(existingMenuItems as any)]
+    const item = unionItems.find((it) => it?.id?.toString() === itemId)
     if (item) {
       setNewSpecial({
         name: item.name,

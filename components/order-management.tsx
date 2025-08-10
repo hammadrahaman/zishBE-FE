@@ -68,9 +68,14 @@ export function OrderManagement({ userType }: OrderManagementProps) {
     return frontendStatus
   }
 
+  // Guard concurrent requests to avoid 429s
+  let loadingInFlight = false
+
   // Load orders from API
   const loadOrders = async (page = 1) => {
     try {
+      if (loadingInFlight) return
+      loadingInFlight = true
       setLoading(true)
       setError(null)
 
@@ -109,6 +114,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
       })
     } finally {
       setLoading(false)
+      loadingInFlight = false
     }
   }
 
@@ -119,7 +125,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
     }
   }, [userType])
 
-  // Reload when filters change
+  // Reload when filters change (debounced)
   useEffect(() => {
     if (userType === "admin" || userType === "superadmin") {
       const timeoutId = setTimeout(() => {
