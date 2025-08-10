@@ -45,6 +45,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [searchOrderId, setSearchOrderId] = useState("")
   const [searchCustomerName, setSearchCustomerName] = useState("")
+  const [searchItemName, setSearchItemName] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [paymentFilter, setPaymentFilter] = useState("all")
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
@@ -81,6 +82,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
         phone: searchTerm.trim() || undefined,
         orderId: searchOrderId.trim() || undefined,
         customerName: searchCustomerName.trim() || undefined,
+        item: searchItemName.trim() || undefined,
         sortBy: 'order_date',
         order: 'desc',
         includeCancelled: true
@@ -126,7 +128,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
 
       return () => clearTimeout(timeoutId)
     }
-  }, [searchTerm, searchOrderId, searchCustomerName, statusFilter, paymentFilter, userType])
+  }, [searchTerm, searchOrderId, searchCustomerName, searchItemName, statusFilter, paymentFilter, userType])
 
   // First, add useEffect to load orders when page changes
   useEffect(() => {
@@ -344,7 +346,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-5 gap-4">
             <div className="space-y-2">
               <Label>Search by Phone</Label>
               <div className="relative">
@@ -413,6 +415,18 @@ export function OrderManagement({ userType }: OrderManagementProps) {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>Item Name</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder="Search items in orders..."
+                  value={searchItemName}
+                  onChange={(e) => setSearchItemName(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2 pt-2">
             <Button
@@ -421,6 +435,7 @@ export function OrderManagement({ userType }: OrderManagementProps) {
                 setSearchTerm("")
                 setSearchOrderId("")
                 setSearchCustomerName("")
+                setSearchItemName("")
                 setStatusFilter("all")
                 setPaymentFilter("all")
                 setCurrentPage(1)
