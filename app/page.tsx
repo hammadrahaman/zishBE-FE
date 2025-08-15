@@ -1474,24 +1474,6 @@ export default function HomePage() {
         orderId={orderPlacedInfo?.id}
         totalAmount={orderPlacedInfo?.totalAmount}
       />
-      
-      {/* Debug info */}
-      {process.env.NODE_ENV === 'development' && (
-        <div style={{ position: 'fixed', top: 10, right: 10, background: 'black', color: 'white', padding: '10px', fontSize: '12px', zIndex: 10001 }}>
-          <div>showOrderPlacedPopup: {showOrderPlacedPopup.toString()}</div>
-          <div>orderPlacedInfo: {JSON.stringify(orderPlacedInfo)}</div>
-          <button 
-            onClick={() => {
-              console.log('Test button clicked - forcing popup to show')
-              setOrderPlacedInfo({ id: "test-123", totalAmount: 25 })
-              setShowOrderPlacedPopup(true)
-            }}
-            style={{ background: 'red', color: 'white', padding: '5px', margin: '5px', border: 'none', cursor: 'pointer' }}
-          >
-            Test Popup
-          </button>
-        </div>
-      )}
     </div>
   )
 }
