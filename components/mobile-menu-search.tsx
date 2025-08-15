@@ -24,6 +24,8 @@ interface MobileMenuSearchProps {
   onUpdateQuantity: (item: MenuItem, newQuantity: number) => void // Add quantity update callback
   selectedCategory: string
   onCategoryChange: (category: string) => void
+  locationAllowed: boolean // Add location state
+  checkingLocation: boolean // Add checking location state
 }
 
 export function MobileMenuSearch({
@@ -34,6 +36,8 @@ export function MobileMenuSearch({
   onUpdateQuantity, // Use callback for quantity updates
   selectedCategory,
   onCategoryChange,
+  locationAllowed, // Use location state
+  checkingLocation, // Use checking location state
 }: MobileMenuSearchProps) {
   const [searchTerm, setSearchTerm] = useState("")
   // Remove local cart state - const [cart, setCart] = useState<{ [key: number]: number }>({})
@@ -64,6 +68,9 @@ export function MobileMenuSearch({
       onUpdateQuantity(item, newQuantity);
     }
   }
+
+  // Check if add to cart should be disabled
+  const isAddToCartDisabled = !locationAllowed || checkingLocation
 
   return (
     <div className="space-y-6">
@@ -144,6 +151,7 @@ export function MobileMenuSearch({
                             e.stopPropagation();
                             updateQuantity(item, quantity - 1);
                           }}
+                          disabled={isAddToCartDisabled}
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
@@ -158,6 +166,7 @@ export function MobileMenuSearch({
                             e.stopPropagation();
                             updateQuantity(item, quantity + 1);
                           }}
+                          disabled={isAddToCartDisabled}
                         >
                           <Plus className="h-3 w-3" />
                         </Button>
@@ -166,14 +175,19 @@ export function MobileMenuSearch({
                   ) : (
                     <Button
                       size="sm"
-                      className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-semibold py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border-0"
+                      className={`w-full font-semibold py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border-0 ${
+                        isAddToCartDisabled
+                          ? "bg-gray-400 cursor-not-allowed hover:bg-gray-400 hover:transform-none hover:shadow-md"
+                          : "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white"
+                      }`}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleAddToCart(item);
                       }}
+                      disabled={isAddToCartDisabled}
                     >
                       <ShoppingCart className="mr-1 h-3 w-3" />
-                      Add
+                      {checkingLocation ? "Checking..." : "Add"}
                     </Button>
                   )}
                 </div>

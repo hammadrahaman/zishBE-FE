@@ -23,6 +23,7 @@ import {
   Plus,
   Loader2,
   AlertCircle,
+  Navigation,
 } from "lucide-react"
 import Link from "next/link"
 import { OrderModal } from "@/components/order-modal"
@@ -563,6 +564,19 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
+  // Location-based ordering state
+  const [locationAllowed, setLocationAllowed] = useState(false)
+  const [locationPermissionAsked, setLocationPermissionAsked] = useState(false)
+  const [checkingLocation, setCheckingLocation] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  
+  // Zish Cafe coordinates (Replace with actual coordinates)
+  const CAFE_COORDINATES = {
+    latitude: 13.025399, // Example coordinates - replace with actual cafe location
+    longitude: 77.625298,
+  }
+  const ALLOWED_DISTANCE = 50 // meters
+  
   const { toast } = useToast()
 
   // ADD THIS MISSING FUNCTION
@@ -574,6 +588,92 @@ export default function HomePage() {
         block: 'start',
       })
     }
+  }
+
+  // Calculate distance between two coordinates using Haversine formula
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371e3 // Earth's radius in meters
+    const φ1 = (lat1 * Math.PI) / 180
+    const φ2 = (lat2 * Math.PI) / 180
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+
+    return R * c // Distance in meters
+  }
+
+  // Request and check user location
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by this browser")
+      return
+    }
+
+    setCheckingLocation(true)
+    setLocationError(null)
+    setLocationPermissionAsked(true)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords
+        const distance = calculateDistance(
+          latitude,
+          longitude,
+          CAFE_COORDINATES.latitude,
+          CAFE_COORDINATES.longitude
+        )
+
+        setCheckingLocation(false)
+
+        if (distance <= ALLOWED_DISTANCE) {
+          setLocationAllowed(true)
+          toast({
+            title: "Location Verified ✅",
+            description: "You're within the ordering area. Happy ordering!",
+            className: "bg-green-50 border-green-200",
+          })
+        } else {
+          setLocationAllowed(false)
+          setLocationError(`You're ${Math.round(distance)}m away from the cafe`)
+          toast({
+            title: "Outside Ordering Area ❌",
+            description: "You're outside the 50-meter range. Please visit the cafe to place an order.",
+            variant: "destructive",
+          })
+        }
+      },
+      (error) => {
+        setCheckingLocation(false)
+        let errorMessage = "Unable to get your location"
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = "Location access denied. Please enable location access to order."
+            break
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = "Location information is unavailable."
+            break
+          case error.TIMEOUT:
+            errorMessage = "Location request timed out."
+            break
+        }
+        
+        setLocationError(errorMessage)
+        toast({
+          title: "Location Error",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000, // 5 minutes
+      }
+    )
   }
 
   // Load menu items from API
@@ -631,6 +731,15 @@ export default function HomePage() {
   })
 
   const addToCart = (item: any, quantity = 1, specialInstructions = "") => {
+    if (!locationAllowed) {
+      toast({
+        title: "Location Required",
+        description: "Please enable location access and ensure you're within 50m of the cafe to add items to cart.",
+        variant: "destructive",
+      })
+      return
+    }
+
     const existingItemIndex = cart.findIndex(
       (cartItem) => cartItem.id === item.id && cartItem.specialInstructions === specialInstructions,
     )
@@ -741,7 +850,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-amber-50">
       {/* Error Alert */}
       {error && (
         <Alert variant="destructive" className="mx-4 mt-4">
@@ -1088,6 +1197,88 @@ export default function HomePage() {
             </p>
           </div>
 
+          {/* Location Access Section */}
+          {!locationPermissionAsked && (
+            <div className="max-w-lg mx-auto mb-8 animate-fade-in">
+              <Alert className="border-amber-200 bg-amber-50/50 backdrop-blur-sm">
+                <MapPin className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      Enable location to start ordering (must be within 50m of cafe)
+                    </span>
+                    <Button
+                      onClick={requestLocation}
+                      disabled={checkingLocation}
+                      size="sm"
+                      className="ml-4 bg-amber-600 hover:bg-amber-700 text-white"
+                    >
+                      {checkingLocation ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Checking...
+                        </>
+                      ) : (
+                        <>
+                          <Navigation className="mr-2 h-3 w-3" />
+                          Enable Location
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          {/* Location Status Display */}
+          {locationPermissionAsked && !checkingLocation && (
+            <div className="max-w-lg mx-auto mb-8 animate-fade-in">
+              {locationAllowed ? (
+                <Alert className="border-green-200 bg-green-50/50 backdrop-blur-sm">
+                  <MapPin className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">
+                        ✅ Location verified - You can now place orders!
+                      </span>
+                      <Button
+                        onClick={requestLocation}
+                        size="sm"
+                        variant="outline"
+                        className="ml-4 border-green-600 text-green-600 hover:bg-green-600 hover:text-white"
+                      >
+                        <Navigation className="mr-2 h-3 w-3" />
+                        Refresh Location
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <Alert className="border-red-200 bg-red-50/50 backdrop-blur-sm">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium">❌ Outside ordering area</div>
+                        {locationError && <div className="text-xs mt-1">{locationError}</div>}
+                      </div>
+                      <Button
+                        onClick={requestLocation}
+                        size="sm"
+                        variant="outline"
+                        className="ml-4 border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+                      >
+                        <Navigation className="mr-2 h-3 w-3" />
+                        Try Again
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+          )}
+
           {/* Menu Search Bar - Hidden on mobile */}
           <div className="hidden md:block">
             <MenuSearchBar
@@ -1126,6 +1317,8 @@ export default function HomePage() {
               onUpdateQuantity={updateMenuItemQuantity}  // Use the new function
               selectedCategory={selectedCategory}
               onCategoryChange={setSelectedCategory}
+              locationAllowed={locationAllowed}
+              checkingLocation={checkingLocation}
             />
           </div>
 
@@ -1135,6 +1328,8 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredItems.map((item: any, index: number) => {
                 const cartQuantity = getCartItemQuantity(item.id)
+                const isAddToCartDisabled = !locationAllowed || checkingLocation
+                
                 return (
                   <Card
                     key={item.id}
@@ -1176,6 +1371,7 @@ export default function HomePage() {
                                 e.stopPropagation();
                                 updateMenuItemQuantity(item, cartQuantity - 1);
                               }}
+                              disabled={isAddToCartDisabled}
                             >
                               <Minus className="h-4 w-4" />
                             </Button>
@@ -1190,6 +1386,7 @@ export default function HomePage() {
                                 e.stopPropagation();
                                 updateMenuItemQuantity(item, cartQuantity + 1);
                               }}
+                              disabled={isAddToCartDisabled}
                             >
                               <Plus className="h-4 w-4" />
                             </Button>
@@ -1197,11 +1394,16 @@ export default function HomePage() {
                         </div>
                       ) : (
                         <Button
-                          className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-semibold py-3 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0"
+                          className={`w-full font-semibold py-3 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-0 ${
+                            isAddToCartDisabled
+                              ? "bg-gray-400 cursor-not-allowed hover:bg-gray-400 hover:transform-none hover:shadow-lg text-white"
+                              : "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white"
+                          }`}
                           onClick={() => addToCart(item)}
+                          disabled={isAddToCartDisabled}
                         >
                           <ShoppingCart className="mr-2 h-4 w-4" />
-                          Add to Cart
+                          {checkingLocation ? "Checking Location..." : "Add to Cart"}
                         </Button>
                       )}
                     </CardContent>
