@@ -45,6 +45,7 @@ import { InventoryInsights } from "@/components/inventory-insights"
 import { FeedbackManagement } from "@/components/feedback-management"
 import { OrderManagement } from "@/components/order-management"
 import { fetchOrderStats, fetchRevenueStats, fetchDashboardStats, downloadDashboardExport } from "@/lib/order-api"
+import { login } from "@/lib/auth-api"
 
 interface Order {
   id: string
@@ -112,6 +113,7 @@ export default function AdminPage() {
   const [fastMovingTopQtyApi, setFastMovingTopQtyApi] = useState<number | null>(null)
   const [showAddSpecial, setShowAddSpecial] = useState(false)
   const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(false)
 
   const [existingMenuItems] = useState([
     {
@@ -939,35 +941,36 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsLoading(true)
     
-    // Define users with their credentials and types
-    const users = {
-      admin: { password: "zish2025", type: "admin" as const },
-      superadmin: { password: "zishsuper2025", type: "superadmin" as const }
-    }
-    
-    // Check credentials
-    const user = users[username as keyof typeof users]
-    if (user && password === user.password) {
+    try {
+      // Call the backend API
+      const user = await login(username, password)
+      
+      // Set login state
       setIsLoggedIn(true)
-      setUserType(user.type)
-      setCurrentUser(username)
+      setUserType(user.role === 'super_admin' ? 'superadmin' : user.role)
+      setCurrentUser(user.username)
+      
+      // Store in localStorage
       localStorage.setItem("adminLoggedIn", "true")
-      localStorage.setItem("userType", user.type)
-      localStorage.setItem("currentUser", username)
+      localStorage.setItem("userType", user.role === 'super_admin' ? 'superadmin' : user.role)
+      localStorage.setItem("currentUser", user.username)
       
       toast({
         title: "Login Successful",
-        description: `Welcome ${user.type === "superadmin" ? "Super Admin" : "Admin"}!`,
+        description: `Welcome ${user.role === 'super_admin' ? 'Super Admin' : user.role}!`,
       })
-    } else {
+    } catch (error) {
       toast({
-        title: "Login Failed",
-        description: "Invalid username or password.",
+        title: "Login Failed", 
+        description: error instanceof Error ? error.message : "Invalid credentials",
         variant: "destructive",
       })
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -1389,8 +1392,8 @@ export default function AdminPage() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full bg-amber-600 hover:bg-amber-700">
-                Login
+              <Button type="submit" disabled={isLoading} className="w-full bg-amber-600 hover:bg-amber-700">
+                {isLoading ? "Logging in..." : "Login"}
               </Button>
             </form>
           </CardContent>

@@ -85,15 +85,8 @@ export async function checkItemsAvailability(itemIds: number[]): Promise<boolean
 
 export async function placeOrder(orderData: OrderSubmission): Promise<Order> {
   try {
-    // First, verify item availability
-    const itemIds = orderData.items.map(item => item.menuItemId);
-
-    try {
-      await checkItemsAvailability(itemIds);
-    } catch (error) {
-      throw new Error('Some menu items are not available. Please refresh your cart and try again.');
-    }
-
+    console.log('Placing order with data:', orderData);
+    
     // Proceed with order placement
     const response = await fetch(`${API_BASE_URL}/orders`, {
       method: 'POST',
@@ -103,18 +96,25 @@ export async function placeOrder(orderData: OrderSubmission): Promise<Order> {
       body: JSON.stringify(orderData),
     })
 
+    console.log('Order API response status:', response.status);
+
     if (!response.ok) {
       const errorData = await response.json()
+      console.error('Order API error:', errorData);
       throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
     }
 
     const apiResponse: ApiResponse<BackendOrder> = await response.json()
+    console.log('Order API success response:', apiResponse);
 
     if (!apiResponse.success) {
       throw new Error(apiResponse.message || 'Failed to place order')
     }
 
-    return transformOrder(apiResponse.data)
+    const transformedOrder = transformOrder(apiResponse.data);
+    console.log('Transformed order:', transformedOrder);
+    
+    return transformedOrder;
   } catch (error) {
     console.error('Error placing order:', error)
     throw error

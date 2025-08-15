@@ -11,6 +11,7 @@ import { ShoppingCart, Loader2, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { placeOrder } from "@/lib/order-api"
 import type { OrderSubmission } from "@/lib/types"
+import { OrderSuccessPopup } from "./order-success-popup"
 
 interface CartItem {
   id: string
@@ -27,6 +28,7 @@ interface OrderModalProps {
   onClose: () => void
   cart: CartItem[]
   clearCart: () => void
+  onSuccess?: (data: { id: string; totalAmount: number }) => void
 }
 
 // Validation functions
@@ -56,7 +58,11 @@ const validatePhoneNumber = (phone: string): string | null => {
   return null
 }
 
-export function OrderModal({ isOpen, onClose, cart, clearCart }: OrderModalProps) {
+export function OrderModal({ isOpen, onClose, cart, clearCart, onSuccess }: OrderModalProps) {
+  console.log('OrderModal props received:', { isOpen, onSuccess: typeof onSuccess, onSuccessExists: !!onSuccess })
+  
+  // No more callback complexity - we handle everything directly!
+  
   const [customerName, setCustomerName] = useState("")
   const [phoneNumber, setPhoneNumber] = useState("")
   const [customerEmail, setCustomerEmail] = useState("")
@@ -67,6 +73,10 @@ export function OrderModal({ isOpen, onClose, cart, clearCart }: OrderModalProps
   const [emailError, setEmailError] = useState<string | null>(null)
   const [phoneError, setPhoneError] = useState<string | null>(null)
   const [nameError, setNameError] = useState<string | null>(null)
+  
+  // Direct popup state (the ONLY popup we need)
+  const [showPopup, setShowPopup] = useState(false)
+  const [popupData, setPopupData] = useState<{id: string, totalAmount: number} | null>(null)
   
   const { toast } = useToast()
 
@@ -155,33 +165,45 @@ export function OrderModal({ isOpen, onClose, cart, clearCart }: OrderModalProps
 
     try {
       // Prepare order data
+      console.log('Cart items before processing:', cart.map(item => ({ id: item.id, name: item.name, type: typeof item.id })));
+      
       const orderData: OrderSubmission = {
         customerName: customerName.trim(),
         customerPhone: phoneNumber.trim() || "Not provided",
         customerEmail: customerEmail.trim() || "Not provided",
-        items: cart.map(item => ({
-          menuItemId: parseInt(item.id),
-          quantity: item.quantity,
-          specialInstructions: item.specialInstructions || ""
-        })),
+        items: cart.map(item => {
+          const menuItemId = typeof item.id === 'string' ? parseInt(item.id) : item.id;
+          console.log(`Processing item: ${item.name}, original id: ${item.id} (${typeof item.id}), converted id: ${menuItemId}`);
+          return {
+            menuItemId: menuItemId,
+            quantity: item.quantity,
+            specialInstructions: item.specialInstructions || ""
+          };
+        }),
         specialInstructions: generalInstructions.trim() || ""
       }
 
       console.log('Submitting order:', orderData)
 
       const response = await placeOrder(orderData)
+      console.log('placeOrder returned:', response)
 
-      // ✅ FIXED: response is an Order object, not ApiResponse
-      toast({
-        title: "Order Placed Successfully! 🎉",
-        description: `Order #${response.id} has been placed. Total: ₹${response.totalAmount}`,
-        duration: 5000,
-      })
+      // Show success popup immediately
+      console.log('Order placed successfully!')
+      const orderInfo = {
+        id: response.id.toString(),
+        totalAmount: response.totalAmount
+      };
+      console.log('Showing popup with order info:', orderInfo)
+      
+      setPopupData(orderInfo)
+      setShowPopup(true)
+      console.log('SUCCESS POPUP STATE SET TO TRUE - POPUP SHOULD APPEAR NOW!')
 
-      // Reset form and close modal
+      // Reset form and clear cart, but don't close modal yet
       resetForm()
-      clearCart()
-      onClose()
+      // clearCart()  // <-- REMOVE THIS LINE
+      // onClose() will be called when success modal is closed
       
     } catch (error) {
       console.error('Order submission error:', error);
@@ -216,20 +238,42 @@ export function OrderModal({ isOpen, onClose, cart, clearCart }: OrderModalProps
     setNameError(null)
   }
 
+  const handlePopupClose = () => {
+    console.log('Popup closed by user')
+    setShowPopup(false)
+    setPopupData(null)
+    // Clear cart when popup is closed
+    clearCart()
+    // Close the parent order modal after popup is closed
+    onClose()
+  }
+
   const handleClose = () => {
     resetForm()
     onClose()
   }
 
+  // Debug current modal states
+  console.log('OrderModal render:', { isOpen, showPopup, popupData })
+
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
-            <ShoppingCart className="h-5 w-5" />
-            Checkout ({getTotalItems()} {getTotalItems() === 1 ? 'item' : 'items'})
-          </DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog
+        open={isOpen && !showPopup}
+        onOpenChange={(open) => {
+          // Only allow parent close when popup is NOT being shown
+          if (!showPopup) {
+            if (!open) handleClose()
+          }
+        }}
+      >
+        <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              <ShoppingCart className="h-5 w-5" />
+              Checkout ({getTotalItems()} {getTotalItems() === 1 ? 'item' : 'items'})
+            </DialogTitle>
+          </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Order Summary */}
@@ -389,5 +433,14 @@ export function OrderModal({ isOpen, onClose, cart, clearCart }: OrderModalProps
         </form>
       </DialogContent>
     </Dialog>
+
+    {/* SUCCESS POPUP - THE ONLY ONE WE NEED */}
+    <OrderSuccessPopup
+      open={showPopup}
+      onClose={handlePopupClose}
+      orderId={popupData?.id}
+      totalAmount={popupData?.totalAmount}
+    />
+  </>
   )
 }

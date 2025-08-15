@@ -26,6 +26,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { OrderModal } from "@/components/order-modal"
+import { OrderSuccessPopup } from "@/components/order-success-popup"
 import { FeedbackModal } from "@/components/feedback-modal"
 import { CartDrawer } from "@/components/cart-drawer"
 import { MobileOrdersView } from "@/components/mobile-orders-view"
@@ -52,9 +53,9 @@ function getImageFileName(itemName: string): string {
 
 // Fallback menu items (in case API fails)
 const fallbackMenuItems: MenuItem[] = [
-  // Tea Items
+  // Tea Items (using real database IDs)
   {
-    id: 1,
+    id: 21,
     name: "Normal Tea",
     price: 15,
     category: "Tea",
@@ -62,7 +63,7 @@ const fallbackMenuItems: MenuItem[] = [
     image: "/images/menu/normal-tea.jpg",
   },
   {
-    id: 2,
+    id: 28,
     name: "Black Tea",
     price: 15,
     category: "Tea",
@@ -70,7 +71,7 @@ const fallbackMenuItems: MenuItem[] = [
     image: "/images/menu/black-tea.jpg",
   },
   {
-    id: 3,
+    id: 23,
     name: "Masala Tea",
     price: 22,
     category: "Tea",
@@ -548,8 +549,10 @@ const fallbackMenuItems: MenuItem[] = [
 export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState("All")
   const [orderModalOpen, setOrderModalOpen] = useState(false)
+  const [showOrderPlacedPopup, setShowOrderPlacedPopup] = useState(false)
+  const [orderPlacedInfo, setOrderPlacedInfo] = useState<{id: string; totalAmount: number} | null>(null)
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
-  const [cart, setCart] = useState([])
+  const [cart, setCart] = useState<any[]>([])
   const [mobileOrdersOpen, setMobileOrdersOpen] = useState(false)
   const [menuSearchTerm, setMenuSearchTerm] = useState("")
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -579,11 +582,15 @@ export default function HomePage() {
       try {
         setLoading(true)
         setError(null)
+        console.log('Loading menu items from API...')
         const items = await fetchMenuItems()
+        console.log('Successfully loaded menu items:', items.length, 'items')
+        console.log('First few items:', items.slice(0, 3).map(item => ({ id: item.id, name: item.name })))
         setMenuItems(items)
       } catch (err) {
         console.error('Failed to load menu items:', err)
         setError('Failed to load menu items. Using offline menu.')
+        console.log('Using fallback menu items')
         // Use fallback menu items
         setMenuItems(fallbackMenuItems)
         toast({
@@ -623,7 +630,7 @@ export default function HomePage() {
     return categoryMatch && searchMatch
   })
 
-  const addToCart = (item, quantity = 1, specialInstructions = "") => {
+  const addToCart = (item: any, quantity = 1, specialInstructions = "") => {
     const existingItemIndex = cart.findIndex(
       (cartItem) => cartItem.id === item.id && cartItem.specialInstructions === specialInstructions,
     )
@@ -642,11 +649,11 @@ export default function HomePage() {
     })
   }
 
-  const removeFromCart = (cartId) => {
+  const removeFromCart = (cartId: any) => {
     setCart(cart.filter((item) => item.cartId !== cartId))
   }
 
-  const updateCartItemQuantity = (cartId, newQuantity) => {
+  const updateCartItemQuantity = (cartId: any, newQuantity: any) => {
     if (newQuantity <= 0) {
       removeFromCart(cartId)
       return
@@ -671,7 +678,7 @@ export default function HomePage() {
   }
 
   // Add the missing getCartItemQuantity function
-  const getCartItemQuantity = (itemId) => {
+  const getCartItemQuantity = (itemId: any) => {
     return cart
       .filter((cartItem) => cartItem.id === itemId)
       .reduce((total, cartItem) => total + cartItem.quantity, 0)
@@ -700,7 +707,7 @@ export default function HomePage() {
   }
 
   // Update the updateMenuItemQuantity function
-  const updateMenuItemQuantity = (item: MenuItem, newQuantity: number) => {
+  const updateMenuItemQuantity = (item: any, newQuantity: number) => {
     if (newQuantity === 0) {
       // Remove item from cart
       setCart(cart.filter(cartItem => cartItem.id !== item.id));
@@ -1126,7 +1133,7 @@ export default function HomePage() {
           <div className="hidden md:block">
             {/* Menu Items Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filteredItems.map((item, index) => {
+              {filteredItems.map((item: any, index: number) => {
                 const cartQuantity = getCartItemQuantity(item.id)
                 return (
                   <Card
@@ -1430,7 +1437,24 @@ export default function HomePage() {
       </footer>
 
       {/* Modals and Drawers */}
-      <OrderModal isOpen={orderModalOpen} onClose={() => setOrderModalOpen(false)} cart={cart} clearCart={clearCart} />
+      <OrderModal
+        isOpen={orderModalOpen}
+        onClose={() => setOrderModalOpen(false)}
+        cart={cart}
+        clearCart={clearCart}
+        onSuccess={(data) => {
+          console.log('Main page received onSuccess with data:', data)
+          console.log('Current showOrderPlacedPopup state:', showOrderPlacedPopup)
+          setOrderPlacedInfo(data)
+          setShowOrderPlacedPopup(true)
+          console.log('Called setShowOrderPlacedPopup(true)')
+          
+          // Force a re-render check after state update
+          setTimeout(() => {
+            console.log('After state update - showOrderPlacedPopup:', showOrderPlacedPopup)
+          }, 100)
+        }}
+      />
       <FeedbackModal isOpen={feedbackModalOpen} onClose={() => setFeedbackModalOpen(false)} />
       <CartDrawer
         cart={cart}
@@ -1439,6 +1463,35 @@ export default function HomePage() {
         clearCart={clearCart}
       />
       <MobileOrdersView isOpen={mobileOrdersOpen} onClose={() => setMobileOrdersOpen(false)} />
+
+      {/* Global order placed popup */}
+      <OrderSuccessPopup
+        open={showOrderPlacedPopup}
+        onClose={() => {
+          console.log('OrderSuccessPopup onClose called')
+          setShowOrderPlacedPopup(false)
+        }}
+        orderId={orderPlacedInfo?.id}
+        totalAmount={orderPlacedInfo?.totalAmount}
+      />
+      
+      {/* Debug info */}
+      {process.env.NODE_ENV === 'development' && (
+        <div style={{ position: 'fixed', top: 10, right: 10, background: 'black', color: 'white', padding: '10px', fontSize: '12px', zIndex: 10001 }}>
+          <div>showOrderPlacedPopup: {showOrderPlacedPopup.toString()}</div>
+          <div>orderPlacedInfo: {JSON.stringify(orderPlacedInfo)}</div>
+          <button 
+            onClick={() => {
+              console.log('Test button clicked - forcing popup to show')
+              setOrderPlacedInfo({ id: "test-123", totalAmount: 25 })
+              setShowOrderPlacedPopup(true)
+            }}
+            style={{ background: 'red', color: 'white', padding: '5px', margin: '5px', border: 'none', cursor: 'pointer' }}
+          >
+            Test Popup
+          </button>
+        </div>
+      )}
     </div>
   )
 }
