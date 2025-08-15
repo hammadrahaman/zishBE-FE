@@ -19,20 +19,28 @@ interface MenuItem {
 interface MobileMenuSearchProps {
   menuItems: MenuItem[]
   categories: string[]
+  cart: any[] // Add main cart state
   onAddToCart: (item: MenuItem) => void
+  onUpdateQuantity: (item: MenuItem, newQuantity: number) => void // Add quantity update callback
   selectedCategory: string
   onCategoryChange: (category: string) => void
+  locationAllowed: boolean // Add location state
+  checkingLocation: boolean // Add checking location state
 }
 
 export function MobileMenuSearch({
   menuItems,
   categories,
+  cart, // Use main cart instead of local state
   onAddToCart,
+  onUpdateQuantity, // Use callback for quantity updates
   selectedCategory,
   onCategoryChange,
+  locationAllowed, // Use location state
+  checkingLocation, // Use checking location state
 }: MobileMenuSearchProps) {
   const [searchTerm, setSearchTerm] = useState("")
-  const [cart, setCart] = useState<{ [key: number]: number }>({})
+  // Remove local cart state - const [cart, setCart] = useState<{ [key: number]: number }>({})
 
   const filteredItems = menuItems.filter((item) => {
     const categoryMatch = selectedCategory === "All" || item.category === selectedCategory
@@ -46,27 +54,23 @@ export function MobileMenuSearch({
   })
 
   const handleAddToCart = (item: MenuItem) => {
-    setCart((prev) => ({
-      ...prev,
-      [item.id]: (prev[item.id] || 0) + 1,
-    }))
     onAddToCart(item)
   }
 
-  const updateQuantity = (itemId: number, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      setCart((prev) => {
-        const updated = { ...prev }
-        delete updated[itemId]
-        return updated
-      })
-    } else {
-      setCart((prev) => ({
-        ...prev,
-        [itemId]: newQuantity,
-      }))
+  // Get quantity from main cart state
+  const getItemQuantity = (itemId: number) => {
+    const cartItem = cart.find((item) => item.id === itemId)
+    return cartItem ? cartItem.quantity : 0
+  }
+
+  const updateQuantity = (item: MenuItem, newQuantity: number) => {
+    if (newQuantity >= 0) {  // Prevent negative quantities
+      onUpdateQuantity(item, newQuantity);
     }
   }
+
+  // Check if add to cart should be disabled
+  const isAddToCartDisabled = !locationAllowed || checkingLocation
 
   return (
     <div className="space-y-6">
@@ -109,7 +113,7 @@ export function MobileMenuSearch({
       {/* Menu Items */}
       <div className="space-y-4">
         {filteredItems.map((item) => {
-          const quantity = cart[item.id] || 0
+          const quantity = getItemQuantity(item.id)
           return (
             <Card
               key={item.id}
@@ -143,7 +147,11 @@ export function MobileMenuSearch({
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-white hover:bg-gray-700 rounded-md"
-                          onClick={() => updateQuantity(item.id, quantity - 1)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateQuantity(item, quantity - 1);
+                          }}
+                          disabled={isAddToCartDisabled}
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
@@ -154,7 +162,11 @@ export function MobileMenuSearch({
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-white hover:bg-gray-700 rounded-md"
-                          onClick={() => updateQuantity(item.id, quantity + 1)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateQuantity(item, quantity + 1);
+                          }}
+                          disabled={isAddToCartDisabled}
                         >
                           <Plus className="h-3 w-3" />
                         </Button>
@@ -163,11 +175,19 @@ export function MobileMenuSearch({
                   ) : (
                     <Button
                       size="sm"
-                      className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-semibold py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border-0"
-                      onClick={() => handleAddToCart(item)}
+                      className={`w-full font-semibold py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border-0 ${
+                        isAddToCartDisabled
+                          ? "bg-gray-400 cursor-not-allowed hover:bg-gray-400 hover:transform-none hover:shadow-md text-white"
+                          : "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white"
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddToCart(item);
+                      }}
+                      disabled={isAddToCartDisabled}
                     >
                       <ShoppingCart className="mr-1 h-3 w-3" />
-                      Add
+                      {checkingLocation ? "Checking..." : "Add"}
                     </Button>
                   )}
                 </div>

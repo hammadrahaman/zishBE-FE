@@ -30,6 +30,7 @@ import { OrderModal } from "@/components/order-modal"
 import { OrderSuccessPopup } from "@/components/order-success-popup"
 import { FeedbackModal } from "@/components/feedback-modal"
 import { CartDrawer } from "@/components/cart-drawer"
+import { LocationPopup } from "@/components/location-popup"
 import { MobileOrdersView } from "@/components/mobile-orders-view"
 import { MobileMenuSearch } from "@/components/mobile-menu-search"
 import { MenuSearchBar } from "@/components/menu-search-bar"
@@ -557,7 +558,7 @@ export default function HomePage() {
   const [mobileOrdersOpen, setMobileOrdersOpen] = useState(false)
   const [menuSearchTerm, setMenuSearchTerm] = useState("")
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [todaysSpecials, setTodaysSpecials] = useState([])
+  const [todaysSpecials, setTodaysSpecials] = useState<MenuItem[]>([])
   
   // API-related state
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
@@ -570,9 +571,17 @@ export default function HomePage() {
   const [checkingLocation, setCheckingLocation] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
   
+  // Location popup state
+  const [showLocationPopup, setShowLocationPopup] = useState(false)
+  const [popupDisabled, setPopupDisabled] = useState(false)
+  const [popupTimerRef, setPopupTimerRef] = useState<NodeJS.Timeout | null>(null)
+  
   // Zish Cafe coordinates (Replace with actual coordinates)
   const CAFE_COORDINATES = {
-    latitude: 13.025399, // Example coordinates - replace with actual cafe location
+    //latitude: 39.7392,   // Replace with your actual cafe latitude
+    //longitude: -104.9903, // Replace with your actual cafe longitude
+
+   latitude: 13.025399,   // Replace with your actual cafe latitude Hammad location do not remove this
     longitude: 77.625298,
   }
   const ALLOWED_DISTANCE = 50 // meters
@@ -630,6 +639,7 @@ export default function HomePage() {
 
         if (distance <= ALLOWED_DISTANCE) {
           setLocationAllowed(true)
+          stopPopupTimer() // Stop recurring popup when location is verified
           toast({
             title: "Location Verified ✅",
             description: "You're within the ordering area. Happy ordering!",
@@ -638,6 +648,7 @@ export default function HomePage() {
         } else {
           setLocationAllowed(false)
           setLocationError(`You're ${Math.round(distance)}m away from the cafe`)
+          startPopupTimer() // Start recurring popup when outside range
           toast({
             title: "Outside Ordering Area ❌",
             description: "You're outside the 50-meter range. Please visit the cafe to place an order.",
@@ -662,6 +673,7 @@ export default function HomePage() {
         }
         
         setLocationError(errorMessage)
+        startPopupTimer() // Start recurring popup when location fails
         toast({
           title: "Location Error",
           description: errorMessage,
@@ -675,6 +687,50 @@ export default function HomePage() {
       }
     )
   }
+
+  // Popup timer management functions
+  const startPopupTimer = () => {
+    if (popupDisabled || popupTimerRef) return
+    
+    // Show popup immediately
+    setShowLocationPopup(true)
+    
+    // Set recurring timer for every 260 seconds
+    const timer = setInterval(() => {
+      if (!popupDisabled && !locationAllowed) {
+        setShowLocationPopup(true)
+      } else {
+        clearInterval(timer)
+        setPopupTimerRef(null)
+      }
+    }, 260000) // 260 seconds
+    
+    setPopupTimerRef(timer)
+  }
+
+  const stopPopupTimer = () => {
+    if (popupTimerRef) {
+      clearInterval(popupTimerRef)
+      setPopupTimerRef(null)
+    }
+  }
+
+  const handlePopupClose = () => {
+    setShowLocationPopup(false)
+  }
+
+  const handleEnableLocationFromPopup = () => {
+    requestLocation()
+  }
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (popupTimerRef) {
+        clearInterval(popupTimerRef)
+      }
+    }
+  }, [popupTimerRef])
 
   // Load menu items from API
   useEffect(() => {
@@ -710,6 +766,14 @@ export default function HomePage() {
   useEffect(() => {
     const savedSpecials = JSON.parse(localStorage.getItem("todaysSpecials") || "[]")
     setTodaysSpecials(savedSpecials)
+  }, [])
+
+  // Show location popup immediately on page load
+  useEffect(() => {
+    // Show popup immediately when page loads if location hasn't been asked yet
+    if (!locationPermissionAsked && !locationAllowed) {
+      setShowLocationPopup(true)
+    }
   }, [])
 
   // Get unique categories from menu items
@@ -1675,6 +1739,13 @@ export default function HomePage() {
         }}
         orderId={orderPlacedInfo?.id}
         totalAmount={orderPlacedInfo?.totalAmount}
+      />
+
+      {/* Location popup */}
+      <LocationPopup
+        isOpen={showLocationPopup}
+        onClose={handlePopupClose}
+        onEnableLocation={handleEnableLocationFromPopup}
       />
     </div>
   )
