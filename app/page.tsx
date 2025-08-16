@@ -584,7 +584,7 @@ export default function HomePage() {
    latitude: 13.025399,   // Replace with your actual cafe latitude Hammad location do not remove this
     longitude: 77.625298,
   }
-  const ALLOWED_DISTANCE = 50 // meters
+  const ALLOWED_DISTANCE = 150000 // meters
   
   const { toast } = useToast()
 
